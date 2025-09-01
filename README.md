@@ -1,50 +1,86 @@
-# Welcome to your Expo app 👋
+# لعبة النقاط والمربعات (Dots and Boxes Game)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+لعبة تفاعلية تم تطويرها باستخدام React Native و Expo، حيث يمكن للاعبين رسم خطوط بين النقاط لتشكيل مربعات.
 
-## Get started
+## المميزات
 
-1. Install dependencies
+- 🎮 واجهة مستخدم بسيطة وجذابة
+- 📱 متوافقة مع iOS و Android
+- 🎨 رسم دقيق باستخدام SVG
+- 🔄 شبكة 4x4 قابلة للتوسيع
 
+## التقنيات المستخدمة
+
+- **React Native** - إطار العمل الأساسي
+- **Expo** - منصة التطوير
+- **TypeScript** - لكتابة كود آمن ومنظم
+- **react-native-svg** - لرسم الأشكال والخطوط
+
+## كيفية التشغيل
+
+### المتطلبات الأساسية
+- Node.js (الإصدار 18 أو أحدث)
+- npm أو yarn
+- Expo CLI
+
+### خطوات التثبيت والتشغيل
+
+1. **تثبيت التبعيات:**
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. **تشغيل التطبيق:**
    ```bash
-   npx expo start
+   npm start
    ```
 
-In the output, you'll find options to open the app in a
+3. **فتح التطبيق:**
+   - قم بتحميل تطبيق Expo Go على هاتفك
+   - امسح رمز QR الذي يظهر في المتصفح
+   - أو اضغط `a` لتشغيل على Android أو `i` لتشغيل على iOS
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## بنية المشروع
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+├── app/                    # مجلد التطبيق الرئيسي (Expo Router)
+│   └── (tabs)/            # شاشات التطبيق
+│       └── index.tsx      # الشاشة الرئيسية
+├── components/             # مكونات React
+│   └── GameBoard.tsx      # مكون لوحة اللعب
+├── constants/              # الثوابت
+└── package.json           # ملف التبعيات
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## كيفية اللعب
 
-## Learn more
+1. تظهر على الشاشة شبكة من النقاط
+2. اضغط على خط فارغ لرسمه
+3. حاول إكمال أكبر عدد من المربعات
+4. اللاعب الذي يكمل مربع يحصل على نقطة إضافية
 
-To learn more about developing your project with Expo, look at the following resources:
+## التطوير المستقبلي
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- [ ] إضافة نظام النقاط
+- [ ] إضافة لاعبين متعددين
+- [ ] إضافة مستويات صعوبة
+- [ ] إضافة مؤثرات صوتية
+- [ ] إضافة وضع اللعب عبر الإنترنت
 
-## Join the community
+## المساهمة
 
-Join our community of developers creating universal apps.
+نرحب بمساهماتكم! يرجى:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. عمل Fork للمشروع
+2. إنشاء فرع جديد للميزة
+3. عمل Commit للتغييرات
+4. عمل Push للفرع
+5. إنشاء Pull Request
+
+## الترخيص
+
+هذا المشروع مرخص تحت رخصة MIT.
+
+---
+
+**استمتع باللعب! 🎉**

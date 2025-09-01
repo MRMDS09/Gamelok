@@ -11,42 +11,13 @@ export default function HomeScreen() {
       { id: 2, name: 'اللاعب الثاني', score: 0, color: '#4ECDC4' },
     ],
     currentPlayer: 0,
-    horizontalLines: Array(7).fill(null).map(() => Array(6).fill(false)),
-    verticalLines: Array(6).fill(null).map(() => Array(7).fill(false)),
-    boxes: Array(6).fill(null).map(() => Array(6).fill(false)),
+    horizontalLines: Array(5).fill(null).map(() => Array(4).fill(false)),
+    verticalLines: Array(4).fill(null).map(() => Array(5).fill(false)),
+    boxes: Array(4).fill(null).map(() => Array(4).fill(false)),
     gameOver: false,
   });
 
-  const [selectedDot, setSelectedDot] = useState<{row: number, col: number} | null>(null);
-  const [selectedLine, setSelectedLine] = useState<{ type: 'h' | 'v'; row: number; col: number } | null>(null);
-
-  // دالة للنقر على نقطة
-  const handleDotPress = (row: number, col: number) => {
-    if (selectedDot) {
-      // إذا كانت هناك نقطة مختارة، حاول رسم خط
-      if (selectedDot.row === row && selectedDot.col === col) {
-        // نفس النقطة - إلغاء الاختيار
-        setSelectedDot(null);
-      } else if (selectedDot.row === row && Math.abs(selectedDot.col - col) === 1) {
-        // خط أفقي
-        drawHorizontalLine(selectedDot.row, Math.min(selectedDot.col, col));
-        setSelectedDot(null);
-      } else if (selectedDot.col === col && Math.abs(selectedDot.row - row) === 1) {
-        // خط عمودي
-        drawVerticalLine(Math.min(selectedDot.row, row), selectedDot.col);
-        setSelectedDot(null);
-      } else {
-        // نقاط غير متجاورة - اختيار النقطة الجديدة
-        setSelectedDot({ row, col });
-      }
-    } else {
-      // اختيار النقطة الأولى
-      setSelectedDot({ row, col });
-    }
-  };
-
-  // دالة لرسم خط أفقي
-  const drawHorizontalLine = (row: number, col: number) => {
+  const handleHorizontalLinePress = (row: number, col: number) => {
     if (gameState.horizontalLines[row][col]) return; // الخط موجود بالفعل
 
     const newHorizontalLines = [...gameState.horizontalLines];
@@ -70,7 +41,7 @@ export default function HomeScreen() {
     }
 
     // التحقق من المربع السفلي (إذا كان موجود)
-    if (row < 6) {
+    if (row < 4) {
       const bottomBox = 
         newHorizontalLines[row+1][col] && // الخط الأفقي السفلي
         gameState.verticalLines[row][col] && // الخط العمودي الأيسر
@@ -106,8 +77,7 @@ export default function HomeScreen() {
     }));
   };
 
-  // دالة لرسم خط عمودي
-  const drawVerticalLine = (row: number, col: number) => {
+  const handleVerticalLinePress = (row: number, col: number) => {
     if (gameState.verticalLines[row][col]) return; // الخط موجود بالفعل
 
     const newVerticalLines = [...gameState.verticalLines];
@@ -131,7 +101,7 @@ export default function HomeScreen() {
     }
 
     // التحقق من المربع الأيمن (إذا كان موجود)
-    if (col < 6) {
+    if (col < 4) {
       const rightBox = 
         newVerticalLines[row][col+1] && // الخط العمودي الأيمن
         gameState.horizontalLines[row][col] && // الخط الأفقي العلوي
@@ -167,23 +137,18 @@ export default function HomeScreen() {
     }));
   };
 
-  // دالة لمعالجة ضغط الخطوط
-  const handleLinePress = (type: 'h' | 'v', row: number, col: number) => {
-    setSelectedLine({ type, row, col });
-  };
-
   return (
     // SafeAreaView تضمن عدم تداخل المحتوى مع حواف الشاشة العلوية (Notch)
     <SafeAreaView style={styles.container}>
-              {/* View هي حاوية المحتوى الرئيسية */}
-        <View style={styles.gameContainer}>
-          <Text style={styles.instruction}>انقر على خط لتحديده</Text>
-          
-          {/* لوحة اللعب */}
+      {/* View هي حاوية المحتوى الرئيسية */}
+      <View style={styles.gameContainer}>
+        <Text style={styles.title}>لعبة النقاط والمربعات</Text>
+        
+        {/* لوحة اللعب */}
         <GameBoard 
           gameState={gameState}
-          selectedLine={selectedLine}
-          onLinePress={handleLinePress}
+          onHorizontalLinePress={handleHorizontalLinePress}
+          onVerticalLinePress={handleVerticalLinePress}
         />
 
         {/* معلومات اللاعبين */}
@@ -210,12 +175,11 @@ export default function HomeScreen() {
               { id: 2, name: 'اللاعب الثاني', score: 0, color: '#4ECDC4' },
             ],
             currentPlayer: 0,
-            horizontalLines: Array(7).fill(null).map(() => Array(6).fill(false)),
-            verticalLines: Array(6).fill(null).map(() => Array(7).fill(false)),
-            boxes: Array(6).fill(null).map(() => Array(6).fill(false)),
+            horizontalLines: Array(5).fill(null).map(() => Array(4).fill(false)),
+            verticalLines: Array(4).fill(null).map(() => Array(5).fill(false)),
+            boxes: Array(4).fill(null).map(() => Array(4).fill(false)),
             gameOver: false,
           });
-          setSelectedLine(null);
         }}>
           <Text style={styles.resetButtonText}>لعبة جديدة</Text>
         </TouchableOpacity>
@@ -243,13 +207,6 @@ const styles = StyleSheet.create({
     color: '#333', // لون نص رمادي غامق
     marginBottom: 50, // هامش سفلي لإعطاء مساحة للوحة اللعب
     textAlign: 'center', // توسيط النص
-  },
-  instruction: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 20,
   },
   playersInfo: {
     flexDirection: 'row',

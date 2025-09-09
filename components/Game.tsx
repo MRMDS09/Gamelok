@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import Svg, { Circle, Line, Rect } from 'react-native-svg';
+import { useAudioManager } from './AudioManager';
 
 // --- Interfaces (تعريف أنواع البيانات) ---
 export interface Player {
@@ -22,18 +23,32 @@ export interface GameState {
 // --- Constants (الثوابت) ---
 const { width: screenWidth } = Dimensions.get('window');
 const BOARD_SIZE = Math.min(screenWidth - 40, 400);
-const GRID_SIZE = 4; // 4x4 مربعات
-const DOT_RADIUS = 5;
-const LINE_THICKNESS = 6;
-const TOUCHABLE_LINE_WIDTH = 20; // منطقة لمس أكبر للخطوط
+const GRID_SIZE = 6; // 6x6 مربعات
+const DOT_RADIUS = 4;
+const LINE_THICKNESS = 10;
+const TOUCHABLE_LINE_WIDTH = 30; // منطقة لمس أكبر للخطوط
 
 // --- The Main Game Component (المكون الرئيسي للعبة) ---
-export const Game: React.FC = () => {
+interface GameProps {
+  onBackToHome?: () => void;
+  player1Color?: string;
+  player2Color?: string;
+  onGameEnd?: (players: Array<{id: number, name: string, score: number, color: string}>) => void;
+}
+
+export const Game: React.FC<GameProps> = ({ 
+  onBackToHome, 
+  player1Color = '#d32f2f', 
+  player2Color = '#1976d2',
+  onGameEnd
+}) => {
+  const { playClickSound, playBoxCompleteSound, playGameOverSound } = useAudioManager();
+  
   // --- State Management (إدارة حالة اللعبة) ---
   const createInitialState = (): GameState => ({
     players: [
-      { id: 1, name: 'اللاعب الأول', score: 0, color: '#d32f2f' },
-      { id: 2, name: 'اللاعب الثاني', score: 0, color: '#1976d2' }
+      { id: 1, name: 'اللاعب الأول', score: 0, color: player1Color },
+      { id: 2, name: 'اللاعب الثاني', score: 0, color: player2Color }
     ],
     currentPlayer: 0,
     horizontalLines: Array(GRID_SIZE + 1).fill(null).map(() => Array(GRID_SIZE).fill(false)),
@@ -44,9 +59,48 @@ export const Game: React.FC = () => {
 
   const [gameState, setGameState] = useState<GameState>(createInitialState());
 
+  // دالة لمعالجة اللمس على اللوحة
+  const handleBoardTouch = useCallback((event: any) => {
+    const { locationX, locationY } = event.nativeEvent;
+    const dotSpacing = BOARD_SIZE / GRID_SIZE;
+    
+    // حساب أقرب خط أفقي
+    for (let r = 0; r <= GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const lineY = r * dotSpacing;
+        const lineX1 = c * dotSpacing;
+        const lineX2 = (c + 1) * dotSpacing;
+        
+        if (Math.abs(locationY - lineY) < TOUCHABLE_LINE_WIDTH / 2 &&
+            locationX >= lineX1 && locationX <= lineX2) {
+          handleLinePress('h', r, c);
+          return;
+        }
+      }
+    }
+    
+    // حساب أقرب خط عمودي
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c <= GRID_SIZE; c++) {
+        const lineX = c * dotSpacing;
+        const lineY1 = r * dotSpacing;
+        const lineY2 = (r + 1) * dotSpacing;
+        
+        if (Math.abs(locationX - lineX) < TOUCHABLE_LINE_WIDTH / 2 &&
+            locationY >= lineY1 && locationY <= lineY2) {
+          handleLinePress('v', r, c);
+          return;
+        }
+      }
+    }
+  }, []);
+
   // --- Game Logic (منطق اللعبة) ---
   const handleLinePress = useCallback((type: 'h' | 'v', row: number, col: number) => {
     if (gameState.gameOver) return;
+    
+    // تشغيل صوت النقر
+    playClickSound();
 
     setGameState(prev => {
       // التأكد من أن الخط لم يتم رسمه من قبل
@@ -89,6 +143,8 @@ export const Game: React.FC = () => {
       if (boxesCompleted > 0) {
         // تحديث النقاط، ويبقى دور اللاعب الحالي
         newPlayers[prev.currentPlayer].score += boxesCompleted;
+        // تشغيل صوت إكمال المربع
+        playBoxCompleteSound();
       } else {
         // انتقال الدور إلى اللاعب التالي
         nextPlayer = (prev.currentPlayer + 1) % prev.players.length;
@@ -97,7 +153,28 @@ export const Game: React.FC = () => {
       // التحقق من نهاية اللعبة
       const totalBoxes = GRID_SIZE * GRID_SIZE;
       const totalScore = newPlayers.reduce((sum, player) => sum + player.score, 0);
-      const gameOver = totalScore === totalBoxes;
+      let gameOver = totalScore === totalBoxes;
+
+      // إنهاء مبكر: إذا كان الفارق أكبر من عدد المربعات المتبقية
+      if (!gameOver) {
+        const remainingBoxes = totalBoxes - totalScore;
+        const scores = newPlayers.map(p => p.score);
+        const maxScore = Math.max(...scores);
+        const minScore = Math.min(...scores);
+        const lead = maxScore - minScore;
+        if (lead > remainingBoxes) {
+          gameOver = true;
+        }
+      }
+
+      // إذا انتهت اللعبة، استدعاء دالة onGameEnd
+      if (gameOver && onGameEnd) {
+        // تشغيل صوت نهاية اللعبة
+        playGameOverSound();
+        setTimeout(() => {
+          onGameEnd(newPlayers);
+        }, 1000); // تأخير قصير لإظهار النتيجة النهائية
+      }
 
       return {
         ...prev,
@@ -130,19 +207,39 @@ export const Game: React.FC = () => {
 
   return (
     <View style={styles.screen}>
+      {/* شريط التنقل */}
+      {onBackToHome && (
+        <View style={styles.navigationBar}>
+          <TouchableOpacity style={styles.backButton} onPress={onBackToHome}>
+            <Text style={styles.backButtonText}>← الرئيسية</Text>
+          </TouchableOpacity>
+          <Text style={styles.gameTitle}>لعبة النقاط والمربعات</Text>
+          <View style={styles.placeholder} />
+        </View>
+      )}
+      
       {/* عرض معلومات اللاعبين */}
       <View style={styles.playersInfo}>
         {gameState.players.map((player, index) => (
-          <View key={player.id} style={[styles.playerCard, gameState.currentPlayer === index && styles.currentPlayer]}>
-            <Text style={styles.playerName}>{player.name}</Text>
-            <Text style={styles.playerScore}>{player.score}</Text>
+          <View key={player.id} style={[
+            styles.playerCard, 
+            { backgroundColor: player.color + '20', borderColor: player.color },
+            gameState.currentPlayer === index && styles.currentPlayer
+          ]}>
+            <View style={[styles.playerColorIndicator, { backgroundColor: player.color }]} />
+            <Text style={[styles.playerName, { color: player.color }]}>{player.name}</Text>
+            <Text style={[styles.playerScore, { color: player.color }]}>{player.score}</Text>
+            {gameState.currentPlayer === index && (
+              <Text style={styles.currentPlayerText}>دورك الآن!</Text>
+            )}
           </View>
         ))}
       </View>
 
       {/* لوحة اللعب */}
-      <View style={styles.boardContainer}>
-        <Svg width={BOARD_SIZE} height={BOARD_SIZE}>
+      <TouchableWithoutFeedback onPress={handleBoardTouch}>
+        <View style={styles.boardContainer}>
+          <Svg width={BOARD_SIZE} height={BOARD_SIZE}>
           {/* رسم المربعات المكتملة */}
           {gameState.boxes.map((row, r) =>
             row.map((playerIndex, c) => {
@@ -168,25 +265,16 @@ export const Game: React.FC = () => {
           {gameState.horizontalLines.map((row, r) => {
             return row.map((drawn, c) => {
               return (
-                <React.Fragment key={`h-${r}-${c}`}> 
-                  <Rect
-                    x={c * dotSpacing}
-                    y={r * dotSpacing - TOUCHABLE_LINE_WIDTH / 2}
-                    width={dotSpacing}
-                    height={TOUCHABLE_LINE_WIDTH}
-                    fill="transparent"
-                    onPress={() => handleLinePress('h', r, c)}
-                  />
-                  <Line
-                    x1={c * dotSpacing}
-                    y1={r * dotSpacing}
-                    x2={(c + 1) * dotSpacing}
-                    y2={r * dotSpacing}
-                    stroke={drawn !== false ? gameState.players[drawn].color : '#ddd'}
-                    strokeWidth={LINE_THICKNESS}
-                    strokeLinecap="round"
-                  />
-                </React.Fragment>
+                <Line
+                  key={`h-${r}-${c}`}
+                  x1={c * dotSpacing}
+                  y1={r * dotSpacing}
+                  x2={(c + 1) * dotSpacing}
+                  y2={r * dotSpacing}
+                  stroke={drawn !== false ? gameState.players[drawn].color : '#ddd'}
+                  strokeWidth={LINE_THICKNESS}
+                  strokeLinecap="round"
+                />
               );
             });
           })}
@@ -195,25 +283,16 @@ export const Game: React.FC = () => {
           {gameState.verticalLines.map((row, r) => {
             return row.map((drawn, c) => {
               return (
-                <React.Fragment key={`v-${r}-${c}`}>
-                  <Rect
-                    x={c * dotSpacing - TOUCHABLE_LINE_WIDTH / 2}
-                    y={r * dotSpacing}
-                    width={TOUCHABLE_LINE_WIDTH}
-                    height={dotSpacing}
-                    fill="transparent"
-                    onPress={() => handleLinePress('v', r, c)}
-                  />
-                  <Line
-                    x1={c * dotSpacing}
-                    y1={r * dotSpacing}
-                    x2={c * dotSpacing}
-                    y2={(r + 1) * dotSpacing}
-                    stroke={drawn !== false ? gameState.players[drawn].color : '#ddd'}
-                    strokeWidth={LINE_THICKNESS}
-                    strokeLinecap="round"
-                  />
-                </React.Fragment>
+                <Line
+                  key={`v-${r}-${c}`}
+                  x1={c * dotSpacing}
+                  y1={r * dotSpacing}
+                  x2={c * dotSpacing}
+                  y2={(r + 1) * dotSpacing}
+                  stroke={drawn !== false ? gameState.players[drawn].color : '#ddd'}
+                  strokeWidth={LINE_THICKNESS}
+                  strokeLinecap="round"
+                />
               );
             });
           })}
@@ -223,7 +302,8 @@ export const Game: React.FC = () => {
             <Circle key={dot.id} cx={dot.cx} cy={dot.cy} r={DOT_RADIUS} fill="#333" />
           ))}
         </Svg>
-      </View>
+        </View>
+      </TouchableWithoutFeedback>
       
       {/* رسالة نهاية اللعبة */}
       {gameState.gameOver && (
@@ -247,40 +327,89 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f4f7',
     padding: 20,
   },
+  navigationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 15,
+    marginBottom: 20,
+  },
+  backButton: {
+    padding: 10,
+    backgroundColor: '#3498db',
+    borderRadius: 20,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  gameTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    textAlign: 'center',
+  },
+  placeholder: {
+    width: 80, // نفس عرض زر الرجوع للحفاظ على التوازن
+  },
   playersInfo: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    marginBottom: 30,
+    marginBottom: 20,
+    paddingHorizontal: 10,
   },
   playerCard: {
     alignItems: 'center',
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    minWidth: 140,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    padding: 20,
+    borderRadius: 15,
+    minWidth: 160,
+    borderWidth: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 5,
+    position: 'relative',
   },
   currentPlayer: {
-    transform: [{ scale: 1.05 }],
-    shadowOpacity: 0.2,
-    elevation: 6,
+    transform: [{ scale: 1.08 }],
+    shadowOpacity: 0.3,
+    elevation: 8,
+    borderWidth: 4,
+  },
+  playerColorIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   playerName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    marginBottom: 5,
+    textAlign: 'center',
   },
   playerScore: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     marginTop: 5,
+  },
+  currentPlayerText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#fff',
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
   boardContainer: {
     width: BOARD_SIZE,

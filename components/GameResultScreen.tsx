@@ -1,13 +1,13 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface GameResultScreenProps {
-  players: Array<{
+  players: {
     id: number;
     name: string;
     score: number;
     color: string;
-  }>;
+  }[];
   onPlayAgain: () => void;
   onBackToHome: () => void;
 }
@@ -44,7 +44,7 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
   const result = getGameResult();
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>نتيجة المباراة</Text>
       </View>
@@ -56,10 +56,10 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
             <Text style={styles.winnerTitle}>🏆 الفائز</Text>
             <View style={[styles.winnerCard, { backgroundColor: result.winner.color + '20', borderColor: result.winner.color }]}>
               <View style={[styles.winnerColorIndicator, { backgroundColor: result.winner.color }]} />
-              <Text style={[styles.winnerName, { color: result.winner.color }]}>
+              <Text style={styles.winnerName}>
                 {result.winner.name}
               </Text>
-              <Text style={[styles.winnerScore, { color: result.winner.color }]}>
+              <Text style={styles.winnerScore}>
                 {result.winner.score} نقطة
               </Text>
             </View>
@@ -67,10 +67,10 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
             <Text style={styles.loserTitle}>الخاسر</Text>
             <View style={[styles.loserCard, { backgroundColor: result.loser.color + '10', borderColor: result.loser.color }]}>
               <View style={[styles.loserColorIndicator, { backgroundColor: result.loser.color }]} />
-              <Text style={[styles.loserName, { color: result.loser.color }]}>
+              <Text style={styles.loserName}>
                 {result.loser.name}
               </Text>
-              <Text style={[styles.loserScore, { color: result.loser.color }]}>
+              <Text style={styles.loserScore}>
                 {result.loser.score} نقطة
               </Text>
             </View>
@@ -85,10 +85,10 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
               {result.players.map((player, index) => (
                 <View key={player.id} style={[styles.drawPlayerCard, { backgroundColor: player.color + '20', borderColor: player.color }]}>
                   <View style={[styles.drawPlayerColorIndicator, { backgroundColor: player.color }]} />
-                  <Text style={[styles.drawPlayerName, { color: player.color }]}>
+                  <Text style={styles.drawPlayerName}>
                     {player.name}
                   </Text>
-                  <Text style={[styles.drawPlayerScore, { color: player.color }]}>
+                  <Text style={styles.drawPlayerScore}>
                     {player.score} نقطة
                   </Text>
                 </View>
@@ -121,45 +121,53 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
           <Text style={styles.homeButtonText}>🏠 الصفحة الرئيسية</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f7',
-    padding: 20,
+    padding: 16,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 30,
-    marginTop: 20,
+    marginBottom: 6,
+    marginTop: 4,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
   },
   winnerContainer: {
     alignItems: 'center',
+    flex: 1,
+    backgroundColor: 'rgba(7, 20, 51, 0.84)',
+    borderColor: 'rgba(130, 194, 255, 0.22)',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 12,
+    marginHorizontal: 6,
   },
   winnerTitle: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#f39c12',
-    marginBottom: 20,
+    color: '#FFB06C',
+    marginBottom: 4,
   },
   winnerCard: {
     alignItems: 'center',
-    padding: 30,
+    padding: 10,
     borderRadius: 20,
-    borderWidth: 4,
-    marginBottom: 20,
+    borderWidth: 2,
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -168,67 +176,78 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   winnerColorIndicator: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginBottom: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginBottom: 4,
     borderWidth: 3,
     borderColor: '#fff',
   },
   winnerName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  winnerScore: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  loserTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#7f8c8d',
-    marginBottom: 10,
+    marginBottom: 3,
+    textAlign: 'center',
+    color: '#FFFFFF',
+  },
+  winnerScore: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  loserTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#B8CBE0',
+    marginBottom: 3,
   },
   loserCard: {
     alignItems: 'center',
-    padding: 20,
+    padding: 8,
     borderRadius: 15,
     borderWidth: 2,
-    opacity: 0.7,
+    opacity: 0.9,
   },
   loserColorIndicator: {
-    width: 25,
-    height: 25,
-    borderRadius: 12.5,
-    marginBottom: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    marginBottom: 3,
     borderWidth: 2,
     borderColor: '#fff',
   },
   loserName: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 'bold',
     marginBottom: 5,
     textAlign: 'center',
+    color: '#FFFFFF',
   },
   loserScore: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   drawContainer: {
     alignItems: 'center',
+    flex: 1,
+    backgroundColor: 'rgba(7, 20, 51, 0.84)',
+    borderColor: 'rgba(130, 194, 255, 0.22)',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 12,
+    marginHorizontal: 6,
   },
   drawTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#9b59b6',
+    color: '#C4B5FD',
     marginBottom: 10,
   },
   drawSubtitle: {
     fontSize: 16,
-    color: '#7f8c8d',
-    marginBottom: 30,
+    color: '#B8CBE0',
+    marginBottom: 12,
     textAlign: 'center',
   },
   drawPlayers: {
@@ -238,7 +257,7 @@ const styles = StyleSheet.create({
   },
   drawPlayerCard: {
     alignItems: 'center',
-    padding: 20,
+    padding: 12,
     borderRadius: 15,
     borderWidth: 3,
     flex: 1,
@@ -262,16 +281,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
     textAlign: 'center',
+    color: '#FFFFFF',
   },
   drawPlayerScore: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   statsContainer: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 15,
-    marginTop: 30,
+    flex: 1,
+    backgroundColor: 'rgba(7, 20, 51, 0.84)',
+    borderColor: 'rgba(130, 194, 255, 0.22)',
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 20,
+    marginTop: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -281,34 +305,40 @@ const styles = StyleSheet.create({
   statsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 15,
+    color: '#FFFFFF',
+    marginBottom: 6,
     textAlign: 'center',
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   statsLabel: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: '#B8CBE0',
   },
   statsValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFFFFF',
   },
   actionsContainer: {
-    marginTop: 20,
+    flexDirection: 'row',
+    marginTop: 8,
   },
   playAgainButton: {
-    backgroundColor: '#27ae60',
-    paddingVertical: 15,
+    backgroundColor: '#168F48',
+    borderColor: '#54E386',
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 44,
+    paddingVertical: 10,
     paddingHorizontal: 30,
     borderRadius: 25,
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 0,
+    marginHorizontal: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
@@ -321,8 +351,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   homeButton: {
-    backgroundColor: '#3498db',
-    paddingVertical: 15,
+    backgroundColor: '#5140A8',
+    borderColor: '#A78BFA',
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 44,
+    paddingVertical: 10,
     paddingHorizontal: 30,
     borderRadius: 25,
     alignItems: 'center',
@@ -331,6 +365,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 6,
+    marginHorizontal: 4,
   },
   homeButtonText: {
     color: '#fff',

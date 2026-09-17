@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import AudioUtils from '../utils/AudioUtils';
+import { useAudioPlayer } from 'expo-audio';
+import * as Haptics from 'expo-haptics';
+import { AppState } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { GameSettings } from './SettingsScreen';
 
 interface AudioManagerContextType {
@@ -13,105 +15,135 @@ interface AudioManagerContextType {
 
 const AudioManagerContext = createContext<AudioManagerContextType | undefined>(undefined);
 
-interface AudioManagerProviderProps {
-  children: React.ReactNode;
-}
+const DEFAULT_SETTINGS: GameSettings = {
+  backgroundMusicEnabled: true,
+  backgroundMusicVolume: 0.7,
+  clickSoundsEnabled: true,
+  clickSoundVolume: 0.8,
+  vibrationEnabled: true,
+  soundEffectsEnabled: true,
+};
 
-export const AudioManagerProvider: React.FC<AudioManagerProviderProps> = ({ children }) => {
-  const [settings, setSettings] = useState<GameSettings>({
-    backgroundMusicEnabled: true,
-    backgroundMusicVolume: 0.7,
-    clickSoundsEnabled: true,
-    clickSoundVolume: 0.8,
-    vibrationEnabled: true,
-    soundEffectsEnabled: true,
-  });
+const reportPlaybackError = (soundName: string, error: unknown) => {
+  console.warn(`تعذر تشغيل صوت ${soundName}. قد يتطلب الويب تفاعلاً من المستخدم أولاً.`, error);
+};
 
-  const [isBackgroundMusicPlaying, setIsBackgroundMusicPlaying] = useState(false);
-  let backgroundMusic: HTMLAudioElement | null = null;
+export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [settings, setSettings] = useState<GameSettings>(DEFAULT_SETTINGS);
+  const [appState, setAppState] = useState(AppState.currentState ?? 'active');
+  const backgroundPlayer = useAudioPlayer(require('../assets/game-music-gemini-2026-09-15.mp3'));
+  const clickPlayer = useAudioPlayer(require('../assets/line-click.wav'));
+  const boxCompletePlayer = useAudioPlayer(require('../assets/box-complete.wav'));
+  const gameOverPlayer = useAudioPlayer(require('../assets/game-over.wav'));
 
-  // تشغيل صوت النقر
-  const playClickSound = () => {
-    if (!settings.clickSoundsEnabled) return;
-    
-    AudioUtils.setVolume(settings.clickSoundVolume);
-    AudioUtils.playClickSound();
-    
-    // تفعيل الاهتزاز إذا كان مفعلاً
-    if (settings.vibrationEnabled) {
-      AudioUtils.vibrate(50);
-    }
-  };
-
-  // تشغيل الموسيقى الخلفية
-  const playBackgroundMusic = () => {
-    if (!settings.backgroundMusicEnabled || isBackgroundMusicPlaying) return;
-    
-    if (!backgroundMusic) {
-      backgroundMusic = new Audio('assets/background-music.mp3'); // تأكد من صحة المسار
-      backgroundMusic.loop = true;
-      backgroundMusic.volume = getVolume('music');
-    }
-    backgroundMusic.play().catch(err => console.error('Error playing background music:', err));
-    setIsBackgroundMusicPlaying(true);
-  };
-
-  // إيقاف الموسيقى الخلفية
-  const stopBackgroundMusic = () => {
-    if (!isBackgroundMusicPlaying) return;
-    
-    backgroundMusic?.pause();
-    setIsBackgroundMusicPlaying(false);
-  };
-
-  // تحديث الإعدادات
-  const updateSettings = (newSettings: GameSettings) => {
-    setSettings(newSettings);
-    
-    // إذا تم إيقاف الموسيقى الخلفية، أوقفها
-    if (!newSettings.backgroundMusicEnabled && isBackgroundMusicPlaying) {
-      stopBackgroundMusic();
-    }
-    
-    // إذا تم تفعيل الموسيقى الخلفية، شغلها
-    if (newSettings.backgroundMusicEnabled && !isBackgroundMusicPlaying) {
-      playBackgroundMusic();
-    }
-  };
-
-  // تشغيل صوت إكمال المربع
-  const playBoxCompleteSound = () => {
-    if (!settings.soundEffectsEnabled) return;
-    AudioUtils.playBoxCompleteSound();
-  };
-
-  // تشغيل صوت نهاية اللعبة
-  const playGameOverSound = () => {
-    if (!settings.soundEffectsEnabled) return;
-    AudioUtils.playGameOverSound();
-  };
-
-  // تنظيف عند إلغاء تحميل المكون
   useEffect(() => {
-    return () => {
-      stopBackgroundMusic();
-    };
+    backgroundPlayer.loop = true;
+  }, [backgroundPlayer]);
+
+  useEffect(() => {
+    backgroundPlayer.volume = settings.backgroundMusicVolume;
+  }, [backgroundPlayer, settings.backgroundMusicVolume]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', setAppState);
+
+    return () => subscription.remove();
   }, []);
 
-  const value: AudioManagerContextType = {
+  useEffect(() => {
+    if (settings.backgroundMusicEnabled && appState === 'active') {
+      if (!backgroundPlayer.playing) {
+        try {
+          backgroundPlayer.play();
+        } catch (error) {
+          reportPlaybackError('background music', error);
+        }
+      }
+      return;
+    }
+
+    try {
+      backgroundPlayer.pause();
+    } catch (error) {
+      reportPlaybackError('background music', error);
+    }
+  }, [appState, backgroundPlayer, settings.backgroundMusicEnabled]);
+
+  useEffect(() => {
+    clickPlayer.volume = settings.clickSoundVolume;
+  }, [clickPlayer, settings.clickSoundVolume]);
+
+  const restartPlayer = useCallback(async (player: typeof clickPlayer, soundName: string) => {
+    try {
+      await player.seekTo(0);
+      player.play();
+    } catch (error) {
+      reportPlaybackError(soundName, error);
+    }
+  }, []);
+
+  const playClickSound = useCallback(() => {
+    if (settings.clickSoundsEnabled) {
+      void restartPlayer(clickPlayer, 'النقر');
+    }
+    if (settings.vibrationEnabled) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch((error) => {
+        console.warn('تعذر تشغيل الاهتزاز.', error);
+      });
+    }
+  }, [clickPlayer, restartPlayer, settings.clickSoundsEnabled, settings.vibrationEnabled]);
+
+  const playBackgroundMusic = useCallback(() => {
+    if (!settings.backgroundMusicEnabled || backgroundPlayer.playing) return;
+    try {
+      backgroundPlayer.play();
+    } catch (error) {
+      reportPlaybackError('الموسيقى الخلفية', error);
+    }
+  }, [backgroundPlayer, settings.backgroundMusicEnabled]);
+
+  const stopBackgroundMusic = useCallback(() => {
+    try {
+      backgroundPlayer.pause();
+    } catch (error) {
+      reportPlaybackError('الموسيقى الخلفية', error);
+    }
+  }, [backgroundPlayer]);
+
+  const updateSettings = useCallback((newSettings: GameSettings) => {
+    setSettings(newSettings);
+  }, []);
+
+  const playBoxCompleteSound = useCallback(() => {
+    if (settings.soundEffectsEnabled) {
+      void restartPlayer(boxCompletePlayer, 'اكتمال المربع');
+    }
+  }, [boxCompletePlayer, restartPlayer, settings.soundEffectsEnabled]);
+
+  const playGameOverSound = useCallback(() => {
+    if (settings.soundEffectsEnabled) {
+      void restartPlayer(gameOverPlayer, 'نهاية اللعبة');
+    }
+  }, [gameOverPlayer, restartPlayer, settings.soundEffectsEnabled]);
+
+  useEffect(() => () => {
+    try {
+      backgroundPlayer.pause();
+    } catch (error) {
+      reportPlaybackError('الموسيقى الخلفية', error);
+    }
+  }, [backgroundPlayer]);
+
+  const value = useMemo<AudioManagerContextType>(() => ({
     playClickSound,
     playBackgroundMusic,
     stopBackgroundMusic,
     updateSettings,
     playBoxCompleteSound,
     playGameOverSound,
-  };
+  }), [playBackgroundMusic, playBoxCompleteSound, playClickSound, playGameOverSound, stopBackgroundMusic, updateSettings]);
 
-  return (
-    <AudioManagerContext.Provider value={value}>
-      {children}
-    </AudioManagerContext.Provider>
-  );
+  return <AudioManagerContext.Provider value={value}>{children}</AudioManagerContext.Provider>;
 };
 
 export const useAudioManager = (): AudioManagerContextType => {

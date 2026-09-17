@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PanResponder, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { PanResponder, SafeAreaView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -115,7 +115,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← رجوع</Text>
@@ -124,6 +124,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       </View>
 
       <View style={styles.content}>
+        <View style={styles.settingsGrid}>
         {/* إعدادات الموسيقى الخلفية */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🎵 الموسيقى الخلفية</Text>
@@ -135,7 +136,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <Switch
               value={settings.backgroundMusicEnabled}
               onValueChange={(value) => updateSetting('backgroundMusicEnabled', value)}
-              trackColor={{ false: '#bdc3c7', true: '#3498db' }}
+              trackColor={{ false: '#52627E', true: '#22D3EE' }}
               thumbColor={settings.backgroundMusicEnabled ? '#fff' : '#f4f3f4'}
             />
           </SettingItem>
@@ -167,7 +168,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <Switch
               value={settings.clickSoundsEnabled}
               onValueChange={(value) => updateSetting('clickSoundsEnabled', value)}
-              trackColor={{ false: '#bdc3c7', true: '#3498db' }}
+              trackColor={{ false: '#52627E', true: '#22D3EE' }}
               thumbColor={settings.clickSoundsEnabled ? '#fff' : '#f4f3f4'}
             />
           </SettingItem>
@@ -194,7 +195,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <Switch
               value={settings.soundEffectsEnabled}
               onValueChange={(value) => updateSetting('soundEffectsEnabled', value)}
-              trackColor={{ false: '#bdc3c7', true: '#3498db' }}
+              trackColor={{ false: '#52627E', true: '#22D3EE' }}
               thumbColor={settings.soundEffectsEnabled ? '#fff' : '#f4f3f4'}
             />
           </SettingItem>
@@ -211,12 +212,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <Switch
               value={settings.vibrationEnabled}
               onValueChange={(value) => updateSetting('vibrationEnabled', value)}
-              trackColor={{ false: '#bdc3c7', true: '#3498db' }}
+              trackColor={{ false: '#52627E', true: '#22D3EE' }}
               thumbColor={settings.vibrationEnabled ? '#fff' : '#f4f3f4'}
             />
           </SettingItem>
         </View>
 
+        </View>
         {/* إعادة تعيين الإعدادات */}
         <TouchableOpacity 
           style={styles.resetButton}
@@ -229,82 +231,103 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>💾 حفظ الإعدادات</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f7',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
+    gap: 14,
   },
   backButton: {
-    padding: 10,
-    marginRight: 15,
+    minWidth: 86,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(9, 25, 60, 0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.35)',
+    borderRadius: 14,
   },
   backButtonText: {
-    fontSize: 18,
-    color: '#3498db',
+    fontSize: 16,
+    color: '#B9F5FF',
     fontWeight: 'bold',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFFFFF',
+    writingDirection: 'rtl',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  settingsGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
   },
   section: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
+    flex: 1,
+    backgroundColor: 'rgba(7, 20, 51, 0.84)',
+    borderColor: 'rgba(130, 194, 255, 0.22)',
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 10,
+    shadowColor: '#020716',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 5,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 15,
+    color: '#B9F5FF',
+    marginBottom: 4,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   settingItem: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 15,
+    minHeight: 52,
+    paddingVertical: 3,
     borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    borderBottomColor: 'rgba(170, 215, 255, 0.13)',
   },
   settingInfo: {
     flex: 1,
-    marginRight: 15,
+    marginLeft: 4,
   },
   settingTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 5,
+    color: '#FFFFFF',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   settingDescription: {
-    fontSize: 14,
-    color: '#7f8c8d',
+    fontSize: 11,
+    color: '#B8CBE0',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   settingControl: {
     minWidth: 50,
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
   slider: {
     width: 120,
@@ -317,13 +340,13 @@ const styles = StyleSheet.create({
   },
   sliderTrack: {
     height: 4,
-    backgroundColor: '#bdc3c7',
+    backgroundColor: '#52627E',
     borderRadius: 2,
     position: 'relative',
   },
   sliderProgress: {
     height: 4,
-    backgroundColor: '#3498db',
+    backgroundColor: '#22D3EE',
     borderRadius: 2,
   },
   sliderThumb: {
@@ -331,7 +354,7 @@ const styles = StyleSheet.create({
     top: -8,
     width: 20,
     height: 20,
-    backgroundColor: '#3498db',
+    backgroundColor: '#22D3EE',
     borderRadius: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -340,12 +363,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   resetButton: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    backgroundColor: 'rgba(9, 25, 60, 0.86)',
+    borderColor: 'rgba(255, 122, 26, 0.65)',
+    borderWidth: 1,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     alignItems: 'center',
-    marginVertical: 10,
+    justifyContent: 'center',
+    marginTop: 8,
   },
   resetButtonText: {
     color: '#fff',
@@ -353,13 +379,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   saveButton: {
-    backgroundColor: '#27ae60',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    margin: 20,
-    borderRadius: 25,
+    backgroundColor: '#168F48',
+    borderColor: '#54E386',
+    borderWidth: 1,
+    minHeight: 44,
+    marginHorizontal: 16,
+    marginVertical: 7,
+    borderRadius: 14,
     alignItems: 'center',
-    shadowColor: '#000',
+    justifyContent: 'center',
+    shadowColor: '#020716',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
     shadowRadius: 5,

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, BackHandler, StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, BackHandler, ImageBackground, StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { AudioManagerProvider, useAudioManager } from './components/AudioManager';
 import { ColorSelectionScreen } from './components/ColorSelectionScreen';
 import { Game } from './components/Game';
@@ -23,7 +24,7 @@ const AppContent: React.FC = () => {
   const [gameSettings, setGameSettings] = useState<GameSettings>(DEFAULT_SETTINGS);
   const [playerColors, setPlayerColors] = useState({ player1: '#d32f2f', player2: '#1976d2' });
   const [gameResult, setGameResult] = useState<Array<{id: number, name: string, score: number, color: string}> | null>(null);
-  const { updateSettings, playBackgroundMusic, stopBackgroundMusic } = useAudioManager();
+  const { updateSettings } = useAudioManager();
 
   const handleStartGame = () => {
     setCurrentScreen('colorSelection');
@@ -74,15 +75,6 @@ const AppContent: React.FC = () => {
     setGameSettings(settings);
     updateSettings(settings);
   };
-
-  // إدارة الموسيقى الخلفية بناءً على الشاشة والإعدادات
-  useEffect(() => {
-    if (gameSettings.backgroundMusicEnabled && (currentScreen === 'home' || currentScreen === 'game')) {
-      playBackgroundMusic();
-    } else {
-      stopBackgroundMusic();
-    }
-  }, [currentScreen, gameSettings.backgroundMusicEnabled]);
 
   const handleGameEnd = (players: Array<{id: number, name: string, score: number, color: string}>) => {
     setGameResult(players);
@@ -150,15 +142,16 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <ImageBackground source={require('./assets/gamelok-background.png')} resizeMode="cover" style={styles.container}>
       {renderCurrentScreen()}
-    </View>
+    </ImageBackground>
   );
 };
 
 const App: React.FC = () => {
   return (
     <AudioManagerProvider>
+      <StatusBar hidden />
       <AppContent />
     </AudioManagerProvider>
   );
@@ -167,7 +160,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f7',
+    backgroundColor: '#081535',
   },
 });
 

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { PanResponder, SafeAreaView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 interface SettingsScreenProps {
   onBack: () => void;
   onSaveSettings: (settings: GameSettings) => void;
+  onPreviewSettings: (settings: GameSettings) => void;
+  onPreviewClickSound: (volume: number) => void;
   initialSettings?: GameSettings;
 }
 
@@ -12,7 +14,6 @@ export interface GameSettings {
   backgroundMusicVolume: number;
   clickSoundsEnabled: boolean;
   clickSoundVolume: number;
-  vibrationEnabled: boolean;
   soundEffectsEnabled: boolean;
 }
 
@@ -21,58 +22,112 @@ const DEFAULT_SETTINGS: GameSettings = {
   backgroundMusicVolume: 0.7,
   clickSoundsEnabled: true,
   clickSoundVolume: 0.8,
-  vibrationEnabled: true,
   soundEffectsEnabled: true,
 };
+
+const clampVolume = (value: number) =>
+  Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+const normalizeSettings = (settings: GameSettings): GameSettings => ({
+  backgroundMusicEnabled: settings.backgroundMusicEnabled,
+  backgroundMusicVolume: clampVolume(settings.backgroundMusicVolume),
+  clickSoundsEnabled: settings.clickSoundsEnabled,
+  clickSoundVolume: clampVolume(settings.clickSoundVolume),
+  soundEffectsEnabled: settings.soundEffectsEnabled,
+});
 
 // مكون Slider مخصص
 const CustomSlider: React.FC<{
   value: number;
   onValueChange: (value: number) => void;
+  onSlidingComplete?: (value: number) => void;
   minimumValue?: number;
   maximumValue?: number;
+  testID: string;
+  source: 'music' | 'click';
   style?: any;
-}> = ({ value, onValueChange, minimumValue = 0, maximumValue = 1, style }) => {
-  const sliderWidth = 120;
-  const thumbSize = 20;
-  
-  const panResponder = PanResponder.create({
+}> = ({ value, onValueChange, onSlidingComplete, minimumValue = 0, maximumValue = 1, testID, source, style }) => {
+  const thumbSize = 26;
+  const [trackWidth, setTrackWidth] = useState(0);
+  const trackWidthRef = useRef(0);
+  const currentValueRef = useRef(value);
+  const onValueChangeRef = useRef(onValueChange);
+  const onSlidingCompleteRef = useRef(onSlidingComplete);
+
+  currentValueRef.current = value;
+  onValueChangeRef.current = onValueChange;
+  onSlidingCompleteRef.current = onSlidingComplete;
+
+  const updateValueFromTouch = (touchX: number) => {
+    const measuredWidth = trackWidthRef.current;
+    const usableWidth = measuredWidth - thumbSize;
+    const valueRange = maximumValue - minimumValue;
+    if (usableWidth <= 0 || valueRange <= 0) return;
+
+    const ratio = clampVolume((touchX - thumbSize / 2) / usableWidth);
+    const nextValue = minimumValue + ratio * valueRange;
+    currentValueRef.current = nextValue;
+    onValueChangeRef.current(nextValue);
+  };
+
+  const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (evt) => {
-      const x = evt.nativeEvent.locationX;
-      const newValue = Math.max(minimumValue, Math.min(maximumValue, 
-        ((x - thumbSize / 2) / (sliderWidth - thumbSize)) * (maximumValue - minimumValue) + minimumValue
-      ));
-      onValueChange(newValue);
+    onPanResponderGrant: (event) => {
+      updateValueFromTouch(event.nativeEvent.locationX);
     },
-    onPanResponderMove: (evt) => {
-      const x = evt.nativeEvent.locationX;
-      const newValue = Math.max(minimumValue, Math.min(maximumValue, 
-        ((x - thumbSize / 2) / (sliderWidth - thumbSize)) * (maximumValue - minimumValue) + minimumValue
-      ));
-      onValueChange(newValue);
+    onPanResponderMove: (event) => {
+      updateValueFromTouch(event.nativeEvent.locationX);
     },
-  });
+    onPanResponderRelease: () => {
+      const finalValue = currentValueRef.current;
+      if (__DEV__) {
+        console.log(`[SLIDER END] source=${source} value=${finalValue.toFixed(2)}`);
+      }
+      onSlidingCompleteRef.current?.(finalValue);
+    },
+    onPanResponderTerminate: () => {},
+  })).current;
 
-  const thumbPosition = ((value - minimumValue) / (maximumValue - minimumValue)) * (sliderWidth - thumbSize);
+  const valueRange = maximumValue - minimumValue;
+  const normalizedValue = valueRange > 0 ? (value - minimumValue) / valueRange : 0;
+  const thumbPosition = Math.max(0, Math.min(1, normalizedValue))
+    * Math.max(0, trackWidth - thumbSize);
+  const progressWidth = Math.max(0, Math.min(1, normalizedValue))
+    * Math.max(0, trackWidth - thumbSize);
 
   return (
-    <View style={[styles.customSliderContainer, style]}>
-      <View style={styles.sliderTrack}>
+    <View
+      style={[styles.customSliderContainer, style]}
+      testID={testID}
+      nativeID={testID}
+      onLayout={(event) => {
+        const width = event.nativeEvent.layout.width;
+        trackWidthRef.current = width;
+        setTrackWidth(width);
+      }}
+      {...panResponder.panHandlers}
+    >
+      <View
+        style={styles.sliderTrack}
+        pointerEvents="none"
+      >
         <View 
           style={[
             styles.sliderProgress, 
-            { width: thumbPosition + thumbSize / 2 }
-          ]} 
-        />
-        <View
-          style={[
-            styles.sliderThumb,
-            { left: thumbPosition }
+            { width: progressWidth }
           ]}
-          {...panResponder.panHandlers}
+          pointerEvents="none"
         />
+      </View>
+      <View
+        style={[
+          styles.sliderThumbTouchTarget,
+          { left: thumbPosition - 9 },
+        ]}
+        pointerEvents="none"
+      >
+        <View style={styles.sliderThumb} pointerEvents="none" />
       </View>
     </View>
   );
@@ -81,17 +136,59 @@ const CustomSlider: React.FC<{
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onBack,
   onSaveSettings,
+  onPreviewSettings,
+  onPreviewClickSound,
   initialSettings = DEFAULT_SETTINGS,
 }) => {
-  const [settings, setSettings] = useState<GameSettings>(initialSettings);
+  const savedSettingsRef = useRef(normalizeSettings(initialSettings));
+  const [settings, setSettings] = useState<GameSettings>(savedSettingsRef.current);
+  const settingsRef = useRef(settings);
 
   const handleSave = () => {
-    onSaveSettings(settings);
+    if (__DEV__) {
+      console.log(`[AUDIO APPLY] music=${settingsRef.current.backgroundMusicVolume.toFixed(2)} click=${settingsRef.current.clickSoundVolume.toFixed(2)} action=save`);
+    }
+    onSaveSettings(settingsRef.current);
     onBack();
   };
 
+  const handleBack = () => {
+    const savedSettings = savedSettingsRef.current;
+    if (__DEV__) {
+      console.log(`[AUDIO APPLY] music=${savedSettings.backgroundMusicVolume.toFixed(2)} click=${savedSettings.clickSoundVolume.toFixed(2)} action=restore`);
+    }
+    onPreviewSettings(savedSettings);
+    onBack();
+  };
+
+  const applyDraftPatch = (patch: Partial<GameSettings>) => {
+    const next = normalizeSettings({ ...settingsRef.current, ...patch });
+    settingsRef.current = next;
+    setSettings(next);
+    onPreviewSettings(next);
+  };
+
   const updateSetting = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    applyDraftPatch({ [key]: value });
+  };
+
+  const handleBackgroundMusicVolumeChange = (value: number) => {
+    applyDraftPatch({ backgroundMusicVolume: clampVolume(value) });
+  };
+
+  const handleClickSoundVolumeChange = (value: number) => {
+    applyDraftPatch({ clickSoundVolume: clampVolume(value) });
+  };
+
+  const handleClickSoundVolumeComplete = (value: number) => {
+    onPreviewClickSound(clampVolume(value));
+  };
+
+  const handleReset = () => {
+    applyDraftPatch(DEFAULT_SETTINGS);
+    if (__DEV__) {
+      console.log(`[AUDIO APPLY] music=${DEFAULT_SETTINGS.backgroundMusicVolume.toFixed(2)} click=${DEFAULT_SETTINGS.clickSoundVolume.toFixed(2)} action=reset`);
+    }
   };
 
   const SettingItem = ({ 
@@ -117,7 +214,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Text style={styles.backButtonText}>← رجوع</Text>
         </TouchableOpacity>
         <Text style={styles.title}>الإعدادات</Text>
@@ -147,11 +244,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               description={`${Math.round(settings.backgroundMusicVolume * 100)}%`}
             >
               <CustomSlider
+                key="background-music-volume"
+                testID="background-music-volume"
+                source="music"
                 style={styles.slider}
                 minimumValue={0}
                 maximumValue={1}
                 value={settings.backgroundMusicVolume}
-                onValueChange={(value) => updateSetting('backgroundMusicVolume', value)}
+                onValueChange={handleBackgroundMusicVolumeChange}
               />
             </SettingItem>
           )}
@@ -179,11 +279,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               description={`${Math.round(settings.clickSoundVolume * 100)}%`}
             >
               <CustomSlider
+                key="click-sound-volume"
+                testID="click-sound-volume"
+                source="click"
                 style={styles.slider}
                 minimumValue={0}
                 maximumValue={1}
                 value={settings.clickSoundVolume}
-                onValueChange={(value) => updateSetting('clickSoundVolume', value)}
+                onValueChange={handleClickSoundVolumeChange}
+                onSlidingComplete={handleClickSoundVolumeComplete}
               />
             </SettingItem>
           )}
@@ -201,28 +305,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </SettingItem>
         </View>
 
-        {/* إعدادات أخرى */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⚙️ إعدادات أخرى</Text>
-          
-          <SettingItem
-            title="الاهتزاز"
-            description="تفعيل الاهتزاز عند النقر"
-          >
-            <Switch
-              value={settings.vibrationEnabled}
-              onValueChange={(value) => updateSetting('vibrationEnabled', value)}
-              trackColor={{ false: '#52627E', true: '#22D3EE' }}
-              thumbColor={settings.vibrationEnabled ? '#fff' : '#f4f3f4'}
-            />
-          </SettingItem>
-        </View>
-
         </View>
         {/* إعادة تعيين الإعدادات */}
         <TouchableOpacity 
           style={styles.resetButton}
-          onPress={() => setSettings(DEFAULT_SETTINGS)}
+          onPress={handleReset}
         >
           <Text style={styles.resetButtonText}>🔄 إعادة تعيين الإعدادات</Text>
         </TouchableOpacity>
@@ -330,37 +417,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   slider: {
-    width: 120,
-    height: 40,
+    width: 180,
+    height: 48,
   },
   customSliderContainer: {
-    width: 120,
-    height: 40,
+    width: 180,
+    height: 48,
     justifyContent: 'center',
   },
   sliderTrack: {
-    height: 4,
+    height: 8,
+    marginHorizontal: 13,
     backgroundColor: '#52627E',
-    borderRadius: 2,
+    borderRadius: 4,
     position: 'relative',
   },
   sliderProgress: {
-    height: 4,
+    height: 8,
     backgroundColor: '#22D3EE',
-    borderRadius: 2,
+    borderRadius: 4,
   },
   sliderThumb: {
     position: 'absolute',
-    top: -8,
-    width: 20,
-    height: 20,
+    top: 9,
+    left: 9,
+    width: 26,
+    height: 26,
     backgroundColor: '#22D3EE',
-    borderRadius: 10,
+    borderRadius: 13,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3,
+  },
+  sliderThumbTouchTarget: {
+    position: 'absolute',
+    top: 2,
+    width: 44,
+    height: 44,
   },
   resetButton: {
     backgroundColor: 'rgba(9, 25, 60, 0.86)',

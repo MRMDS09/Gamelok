@@ -15,16 +15,26 @@ const DEFAULT_SETTINGS: GameSettings = {
   backgroundMusicVolume: 0.7,
   clickSoundsEnabled: true,
   clickSoundVolume: 0.8,
-  vibrationEnabled: true,
   soundEffectsEnabled: true,
 };
+
+const clampVolume = (value: number) =>
+  Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+const normalizeSettings = (settings: GameSettings): GameSettings => ({
+  backgroundMusicEnabled: settings.backgroundMusicEnabled,
+  backgroundMusicVolume: clampVolume(settings.backgroundMusicVolume),
+  clickSoundsEnabled: settings.clickSoundsEnabled,
+  clickSoundVolume: clampVolume(settings.clickSoundVolume),
+  soundEffectsEnabled: settings.soundEffectsEnabled,
+});
 
 const AppContent: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('home');
   const [gameSettings, setGameSettings] = useState<GameSettings>(DEFAULT_SETTINGS);
   const [playerColors, setPlayerColors] = useState({ player1: '#d32f2f', player2: '#1976d2' });
   const [gameResult, setGameResult] = useState<Array<{id: number, name: string, score: number, color: string}> | null>(null);
-  const { updateSettings } = useAudioManager();
+  const { previewClickSound, updateSettings } = useAudioManager();
 
   const handleStartGame = () => {
     setCurrentScreen('colorSelection');
@@ -72,8 +82,13 @@ const AppContent: React.FC = () => {
   };
 
   const handleSaveSettings = (settings: GameSettings) => {
-    setGameSettings(settings);
-    updateSettings(settings);
+    const normalizedSettings = normalizeSettings(settings);
+    setGameSettings(normalizedSettings);
+    updateSettings(normalizedSettings);
+  };
+
+  const handlePreviewSettings = (settings: GameSettings) => {
+    updateSettings(normalizeSettings(settings));
   };
 
   const handleGameEnd = (players: Array<{id: number, name: string, score: number, color: string}>) => {
@@ -123,6 +138,8 @@ const AppContent: React.FC = () => {
           <SettingsScreen
             onBack={handleBackToHome}
             onSaveSettings={handleSaveSettings}
+            onPreviewSettings={handlePreviewSettings}
+            onPreviewClickSound={previewClickSound}
             initialSettings={gameSettings}
           />
         );

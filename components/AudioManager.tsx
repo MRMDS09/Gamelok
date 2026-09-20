@@ -1,11 +1,11 @@
 import { useAudioPlayer } from 'expo-audio';
-import * as Haptics from 'expo-haptics';
 import { AppState } from 'react-native';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { GameSettings } from './SettingsScreen';
 
 interface AudioManagerContextType {
   playClickSound: () => void;
+  previewClickSound: (volume: number) => void;
   playBackgroundMusic: () => void;
   stopBackgroundMusic: () => void;
   updateSettings: (settings: GameSettings) => void;
@@ -20,9 +20,19 @@ const DEFAULT_SETTINGS: GameSettings = {
   backgroundMusicVolume: 0.7,
   clickSoundsEnabled: true,
   clickSoundVolume: 0.8,
-  vibrationEnabled: true,
   soundEffectsEnabled: true,
 };
+
+const clampVolume = (value: number) =>
+  Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+const normalizeSettings = (settings: GameSettings): GameSettings => ({
+  backgroundMusicEnabled: settings.backgroundMusicEnabled,
+  backgroundMusicVolume: clampVolume(settings.backgroundMusicVolume),
+  clickSoundsEnabled: settings.clickSoundsEnabled,
+  clickSoundVolume: clampVolume(settings.clickSoundVolume),
+  soundEffectsEnabled: settings.soundEffectsEnabled,
+});
 
 const reportPlaybackError = (soundName: string, error: unknown) => {
   console.warn(`تعذر تشغيل صوت ${soundName}. قد يتطلب الويب تفاعلاً من المستخدم أولاً.`, error);
@@ -30,9 +40,11 @@ const reportPlaybackError = (soundName: string, error: unknown) => {
 
 export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<GameSettings>(DEFAULT_SETTINGS);
+  const settingsRef = useRef<GameSettings>(DEFAULT_SETTINGS);
   const [appState, setAppState] = useState(AppState.currentState ?? 'active');
   const backgroundPlayer = useAudioPlayer(require('../assets/game-music-gemini-2026-09-15.mp3'));
   const clickPlayer = useAudioPlayer(require('../assets/line-click.wav'));
+  const clickPreviewRequestRef = useRef(0);
   const boxCompletePlayer = useAudioPlayer(require('../assets/box-complete.wav'));
   const gameOverPlayer = useAudioPlayer(require('../assets/game-over.wav'));
 
@@ -41,7 +53,9 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [backgroundPlayer]);
 
   useEffect(() => {
-    backgroundPlayer.volume = settings.backgroundMusicVolume;
+    const musicVolume = clampVolume(settings.backgroundMusicVolume);
+    backgroundPlayer.volume = musicVolume;
+    backgroundPlayer.muted = musicVolume <= 0;
   }, [backgroundPlayer, settings.backgroundMusicVolume]);
 
   useEffect(() => {
@@ -70,7 +84,9 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [appState, backgroundPlayer, settings.backgroundMusicEnabled]);
 
   useEffect(() => {
-    clickPlayer.volume = settings.clickSoundVolume;
+    const clickVolume = clampVolume(settings.clickSoundVolume);
+    clickPlayer.volume = clickVolume;
+    clickPlayer.muted = clickVolume <= 0;
   }, [clickPlayer, settings.clickSoundVolume]);
 
   const restartPlayer = useCallback(async (player: typeof clickPlayer, soundName: string) => {
@@ -83,15 +99,62 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const playClickSound = useCallback(() => {
-    if (settings.clickSoundsEnabled) {
-      void restartPlayer(clickPlayer, 'النقر');
+    const latestSettings = settingsRef.current;
+    const clickVolume = clampVolume(latestSettings.clickSoundVolume);
+    if (!latestSettings.clickSoundsEnabled || clickVolume <= 0) {
+      return;
     }
-    if (settings.vibrationEnabled) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch((error) => {
-        console.warn('تعذر تشغيل الاهتزاز.', error);
-      });
+
+    const requestId = ++clickPreviewRequestRef.current;
+    clickPlayer.volume = clickVolume;
+    clickPlayer.muted = false;
+    void (async () => {
+      try {
+        clickPlayer.pause();
+        await clickPlayer.seekTo(0);
+        if (requestId !== clickPreviewRequestRef.current) return;
+        clickPlayer.volume = clickVolume;
+        clickPlayer.muted = false;
+        clickPlayer.play();
+      } catch (error) {
+        reportPlaybackError('النقر', error);
+      }
+    })();
+  }, [clickPlayer]);
+
+  const previewClickSound = useCallback((volume: number) => {
+    const requestedVolume = clampVolume(volume);
+    const requestId = ++clickPreviewRequestRef.current;
+
+    if (!settingsRef.current.clickSoundsEnabled || requestedVolume <= 0) {
+      clickPlayer.pause();
+      clickPlayer.volume = requestedVolume;
+      clickPlayer.muted = true;
+      if (__DEV__) {
+        console.log(`[CLICK PREVIEW] skipped volume=${requestedVolume.toFixed(2)}`);
+      }
+      return;
     }
-  }, [clickPlayer, restartPlayer, settings.clickSoundsEnabled, settings.vibrationEnabled]);
+
+    void (async () => {
+      try {
+        clickPlayer.pause();
+        clickPlayer.volume = requestedVolume;
+        clickPlayer.muted = false;
+        await clickPlayer.seekTo(0);
+        if (requestId !== clickPreviewRequestRef.current) return;
+
+        clickPlayer.volume = requestedVolume;
+        clickPlayer.muted = false;
+        if (__DEV__) {
+          console.log(`[CLICK PREVIEW] played volume=${requestedVolume.toFixed(2)}`);
+        }
+        clickPlayer.play();
+      } catch (error) {
+        reportPlaybackError('معاينة النقر', error);
+      }
+    })();
+  }, [clickPlayer]);
 
   const playBackgroundMusic = useCallback(() => {
     if (!settings.backgroundMusicEnabled || backgroundPlayer.playing) return;
@@ -111,7 +174,9 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [backgroundPlayer]);
 
   const updateSettings = useCallback((newSettings: GameSettings) => {
-    setSettings(newSettings);
+    const normalizedSettings = normalizeSettings(newSettings);
+    settingsRef.current = normalizedSettings;
+    setSettings(normalizedSettings);
   }, []);
 
   const playBoxCompleteSound = useCallback(() => {
@@ -136,12 +201,13 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const value = useMemo<AudioManagerContextType>(() => ({
     playClickSound,
+    previewClickSound,
     playBackgroundMusic,
     stopBackgroundMusic,
     updateSettings,
     playBoxCompleteSound,
     playGameOverSound,
-  }), [playBackgroundMusic, playBoxCompleteSound, playClickSound, playGameOverSound, stopBackgroundMusic, updateSettings]);
+  }), [playBackgroundMusic, playBoxCompleteSound, playClickSound, playGameOverSound, previewClickSound, stopBackgroundMusic, updateSettings]);
 
   return <AudioManagerContext.Provider value={value}>{children}</AudioManagerContext.Provider>;
 };

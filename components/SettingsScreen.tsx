@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { PanResponder, SafeAreaView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, SafeAreaView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -28,106 +28,75 @@ const DEFAULT_SETTINGS: GameSettings = {
 const clampVolume = (value: number) =>
   Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 
+const VOLUME_STEP = 0.1;
+
+const snapVolumeToStep = (value: number) =>
+  Number((Math.round(clampVolume(value) / VOLUME_STEP) * VOLUME_STEP).toFixed(1));
+
 const normalizeSettings = (settings: GameSettings): GameSettings => ({
   backgroundMusicEnabled: settings.backgroundMusicEnabled,
-  backgroundMusicVolume: clampVolume(settings.backgroundMusicVolume),
+  backgroundMusicVolume: snapVolumeToStep(settings.backgroundMusicVolume),
   clickSoundsEnabled: settings.clickSoundsEnabled,
-  clickSoundVolume: clampVolume(settings.clickSoundVolume),
+  clickSoundVolume: snapVolumeToStep(settings.clickSoundVolume),
   soundEffectsEnabled: settings.soundEffectsEnabled,
 });
 
 // مكون Slider مخصص
-const CustomSlider: React.FC<{
+const SteppedVolumeControl: React.FC<{
   value: number;
   onValueChange: (value: number) => void;
-  onSlidingComplete?: (value: number) => void;
-  minimumValue?: number;
-  maximumValue?: number;
+  onValueComplete?: (value: number) => void;
   testID: string;
   source: 'music' | 'click';
-  style?: any;
-}> = ({ value, onValueChange, onSlidingComplete, minimumValue = 0, maximumValue = 1, testID, source, style }) => {
-  const thumbSize = 26;
-  const [trackWidth, setTrackWidth] = useState(0);
-  const trackWidthRef = useRef(0);
-  const currentValueRef = useRef(value);
-  const onValueChangeRef = useRef(onValueChange);
-  const onSlidingCompleteRef = useRef(onSlidingComplete);
+}> = ({ value, onValueChange, onValueComplete, testID, source }) => {
+  const stepIndex = Math.max(0, Math.min(10, Math.round(clampVolume(value) * 10)));
+  const selectedValue = stepIndex / 10;
 
-  currentValueRef.current = value;
-  onValueChangeRef.current = onValueChange;
-  onSlidingCompleteRef.current = onSlidingComplete;
-
-  const updateValueFromTouch = (touchX: number) => {
-    const measuredWidth = trackWidthRef.current;
-    const usableWidth = measuredWidth - thumbSize;
-    const valueRange = maximumValue - minimumValue;
-    if (usableWidth <= 0 || valueRange <= 0) return;
-
-    const ratio = clampVolume((touchX - thumbSize / 2) / usableWidth);
-    const nextValue = minimumValue + ratio * valueRange;
-    currentValueRef.current = nextValue;
-    onValueChangeRef.current(nextValue);
+  const handleSelectStep = (index: number) => {
+    const uiVolume = index / 10;
+    if (__DEV__) {
+      console.log(`[VOLUME TAP] source=${source} index=${index} ui=${uiVolume.toFixed(2)}`);
+    }
+    onValueChange(uiVolume);
+    onValueComplete?.(uiVolume);
   };
-
-  const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (event) => {
-      updateValueFromTouch(event.nativeEvent.locationX);
-    },
-    onPanResponderMove: (event) => {
-      updateValueFromTouch(event.nativeEvent.locationX);
-    },
-    onPanResponderRelease: () => {
-      const finalValue = currentValueRef.current;
-      if (__DEV__) {
-        console.log(`[SLIDER END] source=${source} value=${finalValue.toFixed(2)}`);
-      }
-      onSlidingCompleteRef.current?.(finalValue);
-    },
-    onPanResponderTerminate: () => {},
-  })).current;
-
-  const valueRange = maximumValue - minimumValue;
-  const normalizedValue = valueRange > 0 ? (value - minimumValue) / valueRange : 0;
-  const thumbPosition = Math.max(0, Math.min(1, normalizedValue))
-    * Math.max(0, trackWidth - thumbSize);
-  const progressWidth = Math.max(0, Math.min(1, normalizedValue))
-    * Math.max(0, trackWidth - thumbSize);
 
   return (
     <View
-      style={[styles.customSliderContainer, style]}
+      style={styles.steppedVolumeControl}
       testID={testID}
       nativeID={testID}
-      onLayout={(event) => {
-        const width = event.nativeEvent.layout.width;
-        trackWidthRef.current = width;
-        setTrackWidth(width);
-      }}
-      {...panResponder.panHandlers}
     >
-      <View
-        style={styles.sliderTrack}
-        pointerEvents="none"
-      >
-        <View 
-          style={[
-            styles.sliderProgress, 
-            { width: progressWidth }
-          ]}
-          pointerEvents="none"
-        />
+      <Text style={styles.volumePercentage}>{Math.round(selectedValue * 100)}%</Text>
+      <View style={styles.volumePointsRow}>
+        {Array.from({ length: 11 }, (_, index) => {
+          const percentage = index * 10;
+          const isSelected = index === stepIndex;
+          const isActive = index <= stepIndex;
+
+          return (
+            <Pressable
+              key={index}
+              style={styles.volumePointCell}
+              onPress={() => handleSelectStep(index)}
+              accessibilityRole="radio"
+              accessibilityLabel={`مستوى الصوت ${percentage}%`}
+              accessibilityHint={source === 'music' ? 'تحديد مستوى موسيقى الخلفية' : 'تحديد مستوى صوت النقر'}
+              accessibilityState={{ selected: isSelected }}
+              testID={`${testID}-step-${percentage}`}
+            >
+              <View style={[
+                styles.volumePoint,
+                isActive ? styles.volumePointActive : styles.volumePointInactive,
+                isSelected && styles.volumePointSelected,
+              ]} />
+            </Pressable>
+          );
+        })}
       </View>
-      <View
-        style={[
-          styles.sliderThumbTouchTarget,
-          { left: thumbPosition - 9 },
-        ]}
-        pointerEvents="none"
-      >
-        <View style={styles.sliderThumb} pointerEvents="none" />
+      <View style={styles.volumeEndpointLabels}>
+        <Text style={styles.volumeEndpointText}>0%</Text>
+        <Text style={styles.volumeEndpointText}>100%</Text>
       </View>
     </View>
   );
@@ -173,15 +142,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   };
 
   const handleBackgroundMusicVolumeChange = (value: number) => {
-    applyDraftPatch({ backgroundMusicVolume: clampVolume(value) });
+    applyDraftPatch({ backgroundMusicVolume: snapVolumeToStep(value) });
   };
 
   const handleClickSoundVolumeChange = (value: number) => {
-    applyDraftPatch({ clickSoundVolume: clampVolume(value) });
+    applyDraftPatch({ clickSoundVolume: snapVolumeToStep(value) });
   };
 
   const handleClickSoundVolumeComplete = (value: number) => {
-    onPreviewClickSound(clampVolume(value));
+    onPreviewClickSound(snapVolumeToStep(value));
   };
 
   const handleReset = () => {
@@ -243,13 +212,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               title="مستوى الصوت"
               description={`${Math.round(settings.backgroundMusicVolume * 100)}%`}
             >
-              <CustomSlider
+              <SteppedVolumeControl
                 key="background-music-volume"
                 testID="background-music-volume"
                 source="music"
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={1}
                 value={settings.backgroundMusicVolume}
                 onValueChange={handleBackgroundMusicVolumeChange}
               />
@@ -278,16 +244,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               title="مستوى صوت النقر"
               description={`${Math.round(settings.clickSoundVolume * 100)}%`}
             >
-              <CustomSlider
+              <SteppedVolumeControl
                 key="click-sound-volume"
                 testID="click-sound-volume"
                 source="click"
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={1}
                 value={settings.clickSoundVolume}
                 onValueChange={handleClickSoundVolumeChange}
-                onSlidingComplete={handleClickSoundVolumeComplete}
+                onValueComplete={handleClickSoundVolumeComplete}
               />
             </SettingItem>
           )}
@@ -416,46 +379,60 @@ const styles = StyleSheet.create({
     minWidth: 50,
     alignItems: 'center',
   },
-  slider: {
-    width: 180,
-    height: 48,
+  steppedVolumeControl: {
+    width: 297,
+    minHeight: 70,
+    alignItems: 'stretch',
   },
-  customSliderContainer: {
-    width: 180,
-    height: 48,
-    justifyContent: 'center',
+  volumePercentage: {
+    color: '#B9F5FF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 2,
   },
-  sliderTrack: {
-    height: 8,
-    marginHorizontal: 13,
-    backgroundColor: '#52627E',
-    borderRadius: 4,
-    position: 'relative',
-  },
-  sliderProgress: {
-    height: 8,
-    backgroundColor: '#22D3EE',
-    borderRadius: 4,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    top: 9,
-    left: 9,
-    width: 26,
-    height: 26,
-    backgroundColor: '#22D3EE',
-    borderRadius: 13,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  sliderThumbTouchTarget: {
-    position: 'absolute',
-    top: 2,
-    width: 44,
+  volumePointsRow: {
     height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  volumePointCell: {
+    flex: 1,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  volumePoint: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  volumePointActive: {
+    backgroundColor: '#22D3EE',
+  },
+  volumePointInactive: {
+    backgroundColor: '#52627E',
+  },
+  volumePointSelected: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#B9F5FF',
+    shadowColor: '#22D3EE',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  volumeEndpointLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -2,
+  },
+  volumeEndpointText: {
+    color: '#B8CBE0',
+    fontSize: 10,
   },
   resetButton: {
     backgroundColor: 'rgba(9, 25, 60, 0.86)',

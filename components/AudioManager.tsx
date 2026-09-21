@@ -1,4 +1,4 @@
-import { useAudioPlayer } from 'expo-audio';
+import { AudioPlayer, useAudioPlayer } from 'expo-audio';
 import { AppState } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { GameSettings } from './SettingsScreen';
@@ -25,6 +25,46 @@ const DEFAULT_SETTINGS: GameSettings = {
 
 const clampVolume = (value: number) =>
   Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+const toPlayerVolume = (uiVolume: number) => {
+  const normalized = clampVolume(uiVolume);
+
+  if (normalized <= 0) {
+    return 0;
+  }
+
+  return normalized * normalized;
+};
+
+const applyPlayerVolume = (
+  player: AudioPlayer,
+  source: 'music' | 'click',
+  uiVolume: number,
+) => {
+  const normalizedUi = clampVolume(uiVolume);
+  const playerVolume = toPlayerVolume(normalizedUi);
+
+  player.volume = playerVolume;
+  player.muted = playerVolume <= 0;
+
+  // expo-audio 0.4.9 restores its remembered volume when unmuting on Android.
+  // Reassert the requested value so it is the final native volume write.
+  if (playerVolume > 0) {
+    player.volume = playerVolume;
+  }
+
+  if (__DEV__) {
+    console.log(
+      `[PLAYER STATE] source=${source}` +
+      ` ui=${normalizedUi.toFixed(2)}` +
+      ` requested=${playerVolume.toFixed(2)}` +
+      ` actual=${Number(player.volume).toFixed(2)}` +
+      ` muted=${String(player.muted)}`
+    );
+  }
+
+  return playerVolume;
+};
 
 const normalizeSettings = (settings: GameSettings): GameSettings => ({
   backgroundMusicEnabled: settings.backgroundMusicEnabled,
@@ -53,9 +93,7 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [backgroundPlayer]);
 
   useEffect(() => {
-    const musicVolume = clampVolume(settings.backgroundMusicVolume);
-    backgroundPlayer.volume = musicVolume;
-    backgroundPlayer.muted = musicVolume <= 0;
+    applyPlayerVolume(backgroundPlayer, 'music', settings.backgroundMusicVolume);
   }, [backgroundPlayer, settings.backgroundMusicVolume]);
 
   useEffect(() => {
@@ -84,9 +122,7 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [appState, backgroundPlayer, settings.backgroundMusicEnabled]);
 
   useEffect(() => {
-    const clickVolume = clampVolume(settings.clickSoundVolume);
-    clickPlayer.volume = clickVolume;
-    clickPlayer.muted = clickVolume <= 0;
+    applyPlayerVolume(clickPlayer, 'click', settings.clickSoundVolume);
   }, [clickPlayer, settings.clickSoundVolume]);
 
   const restartPlayer = useCallback(async (player: typeof clickPlayer, soundName: string) => {
@@ -100,21 +136,21 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const playClickSound = useCallback(() => {
     const latestSettings = settingsRef.current;
-    const clickVolume = clampVolume(latestSettings.clickSoundVolume);
-    if (!latestSettings.clickSoundsEnabled || clickVolume <= 0) {
+    const clickUiVolume = clampVolume(latestSettings.clickSoundVolume);
+    const requestId = ++clickPreviewRequestRef.current;
+
+    if (!latestSettings.clickSoundsEnabled || clickUiVolume <= 0) {
+      clickPlayer.pause();
+      applyPlayerVolume(clickPlayer, 'click', clickUiVolume);
       return;
     }
 
-    const requestId = ++clickPreviewRequestRef.current;
-    clickPlayer.volume = clickVolume;
-    clickPlayer.muted = false;
+    clickPlayer.pause();
+    applyPlayerVolume(clickPlayer, 'click', clickUiVolume);
     void (async () => {
       try {
-        clickPlayer.pause();
         await clickPlayer.seekTo(0);
         if (requestId !== clickPreviewRequestRef.current) return;
-        clickPlayer.volume = clickVolume;
-        clickPlayer.muted = false;
         clickPlayer.play();
       } catch (error) {
         reportPlaybackError('النقر', error);
@@ -122,32 +158,29 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
     })();
   }, [clickPlayer]);
 
-  const previewClickSound = useCallback((volume: number) => {
-    const requestedVolume = clampVolume(volume);
+  const previewClickSound = useCallback((_volume: number) => {
+    const latestSettings = settingsRef.current;
+    const clickUiVolume = clampVolume(latestSettings.clickSoundVolume);
     const requestId = ++clickPreviewRequestRef.current;
 
-    if (!settingsRef.current.clickSoundsEnabled || requestedVolume <= 0) {
+    if (!latestSettings.clickSoundsEnabled || clickUiVolume <= 0) {
       clickPlayer.pause();
-      clickPlayer.volume = requestedVolume;
-      clickPlayer.muted = true;
+      const clickPlayerVolume = applyPlayerVolume(clickPlayer, 'click', clickUiVolume);
       if (__DEV__) {
-        console.log(`[CLICK PREVIEW] skipped volume=${requestedVolume.toFixed(2)}`);
+        console.log(`[CLICK PREVIEW] skipped ui=${clickUiVolume.toFixed(2)} player=${clickPlayerVolume.toFixed(2)}`);
       }
       return;
     }
 
+    clickPlayer.pause();
+    const clickPlayerVolume = applyPlayerVolume(clickPlayer, 'click', clickUiVolume);
     void (async () => {
       try {
-        clickPlayer.pause();
-        clickPlayer.volume = requestedVolume;
-        clickPlayer.muted = false;
         await clickPlayer.seekTo(0);
         if (requestId !== clickPreviewRequestRef.current) return;
 
-        clickPlayer.volume = requestedVolume;
-        clickPlayer.muted = false;
         if (__DEV__) {
-          console.log(`[CLICK PREVIEW] played volume=${requestedVolume.toFixed(2)}`);
+          console.log(`[CLICK PREVIEW] ui=${clickUiVolume.toFixed(2)} player=${clickPlayerVolume.toFixed(2)}`);
         }
         clickPlayer.play();
       } catch (error) {
@@ -174,10 +207,24 @@ export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [backgroundPlayer]);
 
   const updateSettings = useCallback((newSettings: GameSettings) => {
-    const normalizedSettings = normalizeSettings(newSettings);
-    settingsRef.current = normalizedSettings;
-    setSettings(normalizedSettings);
-  }, []);
+    const normalized = normalizeSettings(newSettings);
+
+    settingsRef.current = normalized;
+
+    applyPlayerVolume(
+      backgroundPlayer,
+      'music',
+      normalized.backgroundMusicVolume
+    );
+
+    applyPlayerVolume(
+      clickPlayer,
+      'click',
+      normalized.clickSoundVolume
+    );
+
+    setSettings(normalized);
+  }, [backgroundPlayer, clickPlayer]);
 
   const playBoxCompleteSound = useCallback(() => {
     if (settings.soundEffectsEnabled) {

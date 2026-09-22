@@ -9,6 +9,7 @@ interface GameResultScreenProps {
     score: number;
     color: string;
   }[];
+  endedEarly?: boolean;
   onPlayAgain: () => void;
   onBackToHome: () => void;
   onOpenSettings?: () => void;
@@ -16,6 +17,7 @@ interface GameResultScreenProps {
 
 export const GameResultScreen: React.FC<GameResultScreenProps> = ({
   players,
+  endedEarly = false,
   onPlayAgain,
   onBackToHome,
   onOpenSettings,
@@ -62,6 +64,9 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
         <Text style={styles.resultText}>
           {result.type === 'winner' ? `الفائز: ${result.winner.name}` : 'تعادل اللاعبان'}
         </Text>
+        {endedEarly && (
+          <Text style={styles.earlyFinishText}>حُسمت المباراة مبكراً</Text>
+        )}
 
         <View style={styles.scoreCards}>
           {players.map((player, index) => {
@@ -164,6 +169,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
     marginTop: 2,
+    marginBottom: 6,
+  },
+  earlyFinishText: {
+    color: COLORS.gold,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: -2,
     marginBottom: 6,
   },
   scoreCards: {

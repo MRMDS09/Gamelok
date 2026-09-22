@@ -38,10 +38,12 @@ const AppContent: React.FC = () => {
     player2: COLORS.playerBlue,
   });
   const [gameResult, setGameResult] = useState<Array<{id: number, name: string, score: number, color: string}> | null>(null);
+  const [gameEndedEarly, setGameEndedEarly] = useState(false);
   const [gameSettingsOpen, setGameSettingsOpen] = useState(false);
   const { previewClickSound, updateSettings } = useAudioManager();
 
   const handleStartGame = () => {
+    setGameEndedEarly(false);
     setGameSettingsOpen(false);
     setCurrentScreen('colorSelection');
   };
@@ -57,6 +59,7 @@ const AppContent: React.FC = () => {
 
   const handleSaveColors = (player1Color: string, player2Color: string) => {
     setPlayerColors({ player1: player1Color, player2: player2Color });
+    setGameEndedEarly(false);
     setGameSettingsOpen(false);
     setCurrentScreen('game');
   };
@@ -71,14 +74,19 @@ const AppContent: React.FC = () => {
     updateSettings(normalizeSettings(settings));
   };
 
-  const handleGameEnd = (players: Array<{id: number, name: string, score: number, color: string}>) => {
+  const handleGameEnd = (
+    players: Array<{id: number, name: string, score: number, color: string}>,
+    endedEarly: boolean,
+  ) => {
     setGameResult(players);
+    setGameEndedEarly(endedEarly);
     setGameSettingsOpen(false);
     setCurrentScreen('gameResult');
   };
 
   const handlePlayAgain = () => {
     setGameResult(null);
+    setGameEndedEarly(false);
     setGameSettingsOpen(false);
     setCurrentScreen('game');
   };
@@ -143,6 +151,7 @@ const AppContent: React.FC = () => {
           <View style={styles.screenStack}>
             <GameResultScreen
               players={gameResult}
+              endedEarly={gameEndedEarly}
               onPlayAgain={handlePlayAgain}
               onBackToHome={handleBackToHome}
               onOpenSettings={() => setGameSettingsOpen(true)}

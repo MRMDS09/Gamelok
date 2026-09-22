@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle, Line, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useAudioManager } from './AudioManager';
 import { COLORS } from './theme';
 
@@ -33,6 +33,21 @@ type EdgeDistance = { edge: Edge; distance: number };
 type BoardHit = { edge: Edge | null; nearest: EdgeDistance | null;
   second: EdgeDistance | null; result: 'selected' | 'ambiguous' | 'too-far' };
 const AMBIGUITY_TOLERANCE = 2;
+
+const mixHexColor = (color: string, target: number, ratio: number) => {
+  const normalized = color.trim().replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return color;
+
+  const channels = [0, 2, 4].map((offset) => parseInt(normalized.slice(offset, offset + 2), 16));
+  return `#${channels.map((channel) => Math.round(channel + (target - channel) * ratio)
+    .toString(16).padStart(2, '0')).join('')}`;
+};
+
+const createCompletedSquareGradient = (color: string) => ({
+  center: mixHexColor(color, 0, 0.3),
+  base: color,
+  edge: mixHexColor(color, 255, 0.3),
+});
 
 const distancePointToSegment = (pointX: number, pointY: number,
   startX: number, startY: number, endX: number, endY: number): number => {
@@ -96,7 +111,10 @@ interface GameProps {
   onOpenSettings?: () => void;
   player1Color?: string;
   player2Color?: string;
-  onGameEnd?: (players: {id: number, name: string, score: number, color: string}[]) => void;
+  onGameEnd?: (
+    players: {id: number, name: string, score: number, color: string}[],
+    endedEarly: boolean,
+  ) => void;
 }
 
 export const Game: React.FC<GameProps> = ({ 
@@ -109,6 +127,8 @@ export const Game: React.FC<GameProps> = ({
   const { playClickSound, playBoxCompleteSound, playGameOverSound } = useAudioManager();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const completedSquareGradients = useMemo(() => [player1Color, player2Color]
+    .map(createCompletedSquareGradient), [player1Color, player2Color]);
   const sidePanelWidth = Math.min(340, Math.max(228,
     Math.min(284, layout.width * 0.36) + Math.max(0, windowWidth - 900) * 0.15,
   ));
@@ -130,6 +150,8 @@ export const Game: React.FC<GameProps> = ({
   const boardHeight = cellSize * BOX_ROWS + BOARD_INSET * 2;
   const lineThickness = Math.max(7, Math.min(13, cellSize * 0.16));
   const dotRadius = Math.max(4, Math.min(7, cellSize * 0.1));
+  const completedSquareBorderInset = Math.max(2, lineThickness * 0.45);
+  const completedSquareBorderWidth = Math.max(2, lineThickness * 0.28);
   const EDGE_HIT_RADIUS = Math.min(30, Math.max(20, cellSize * 0.32));
   const boardEdges = createBoardEdges(cellSize, BOARD_INSET);
   const controlHeight = layout.height || windowHeight;
@@ -220,17 +242,23 @@ export const Game: React.FC<GameProps> = ({
         nextPlayer = (prev.currentPlayer + 1) % prev.players.length;
       }
 
-      // التحقق من نهاية اللعبة
-      const totalScore = newPlayers.reduce((sum, player) => sum + player.score, 0);
-      const gameOver = totalScore === TOTAL_BOXES;
+      // التحقق من نهاية اللعبة بعد احتساب كامل نقاط الحركة الحالية.
+      const completedBoxes = newPlayers[0].score + newPlayers[1].score;
+      const remainingBoxes = TOTAL_BOXES - completedBoxes;
+      const scoreDifference = Math.abs(newPlayers[0].score - newPlayers[1].score);
+      const fullBoardComplete = completedBoxes === TOTAL_BOXES;
+      const endedEarly = boxesCompleted > 0
+        && !fullBoardComplete
+        && scoreDifference > remainingBoxes;
+      const gameOver = fullBoardComplete || endedEarly;
 
       // إذا انتهت اللعبة، استدعاء دالة onGameEnd
       if (gameOver && onGameEnd) {
         // تشغيل صوت نهاية اللعبة
         playGameOverSound();
         setTimeout(() => {
-          onGameEnd(newPlayers);
-        }, 1000); // تأخير قصير لإظهار النتيجة النهائية
+          onGameEnd(newPlayers, endedEarly);
+        }, endedEarly ? 0 : 1000); // الحسم المبكر فوري، والنهاية العادية تحتفظ بالتأخير الحالي.
       }
 
       return {
@@ -279,6 +307,17 @@ export const Game: React.FC<GameProps> = ({
       });
     }
   }
+  const completedSquares: { id: string; row: number; col: number; playerIndex: number }[] = [];
+  gameState.boxes.forEach((row, rowIndex) => row.forEach((playerIndex, colIndex) => {
+    if (playerIndex !== null) {
+      completedSquares.push({
+        id: `b-${rowIndex}-${colIndex}`,
+        row: rowIndex,
+        col: colIndex,
+        playerIndex,
+      });
+    }
+  }));
   const selectedEdges: { id: string; x: number; y: number; horizontal: boolean; color: string }[] = [];
   gameState.horizontalLines.forEach((row, r) => row.forEach((drawn, c) => {
     if (drawn !== false) selectedEdges.push({
@@ -327,27 +366,62 @@ export const Game: React.FC<GameProps> = ({
             style={[styles.boardSurface, { width: boardWidth, height: boardHeight }]}
           >
           <Svg pointerEvents="none" width={boardWidth} height={boardHeight} style={styles.boardSvg}>
+          <Defs>
+            {completedSquareGradients.map((gradient, playerIndex) => (
+              <RadialGradient
+                key={`completed-square-gradient-${playerIndex}`}
+                id={`completed-square-gradient-${playerIndex}`}
+                cx="50%"
+                cy="50%"
+                r="72%"
+                fx="50%"
+                fy="50%"
+              >
+                <Stop offset="0%" stopColor={gradient.center} stopOpacity={1} />
+                <Stop offset="60%" stopColor={gradient.base} stopOpacity={1} />
+                <Stop offset="100%" stopColor={gradient.edge} stopOpacity={1} />
+              </RadialGradient>
+            ))}
+          </Defs>
+
+          <Rect
+            pointerEvents="none"
+            x={0}
+            y={0}
+            width={boardWidth}
+            height={boardHeight}
+            fill={COLORS.board}
+          />
+
           {/* رسم المربعات المكتملة */}
-          {gameState.boxes.map((row, r) =>
-            row.map((playerIndex, c) => {
-              if (playerIndex !== null) {
-                const player = gameState.players[playerIndex];
-                return (
-                  <Rect
-                    key={`b-${r}-${c}`}
-                    pointerEvents="none"
-                    x={BOARD_INSET + c * cellSize}
-                    y={BOARD_INSET + r * cellSize}
-                    width={cellSize}
-                    height={cellSize}
-                    fill={player.color}
-                    opacity={0.3}
-                  />
-                );
-              }
-              return null;
-            })
-          )}
+          {completedSquares.map((square) => (
+            <Rect
+              key={`${square.id}-fill`}
+              pointerEvents="none"
+              x={BOARD_INSET + square.col * cellSize}
+              y={BOARD_INSET + square.row * cellSize}
+              width={cellSize}
+              height={cellSize}
+              fill={`url(#completed-square-gradient-${square.playerIndex})`}
+              fillOpacity={1}
+            />
+          ))}
+
+          {/* إبراز خفيف داخل المربعات المكتملة، أسفل الحواف الأصلية. */}
+          {completedSquares.map((square) => (
+            <Rect
+              key={`${square.id}-highlight`}
+              pointerEvents="none"
+              x={BOARD_INSET + square.col * cellSize + completedSquareBorderInset}
+              y={BOARD_INSET + square.row * cellSize + completedSquareBorderInset}
+              width={Math.max(0, cellSize - completedSquareBorderInset * 2)}
+              height={Math.max(0, cellSize - completedSquareBorderInset * 2)}
+              fill="none"
+              stroke={completedSquareGradients[square.playerIndex].edge}
+              strokeWidth={completedSquareBorderWidth}
+              strokeOpacity={1}
+            />
+          ))}
 
           {/* Unselected edges sit below the colored glow and the dots. */}
           {gameState.horizontalLines.map((row, r) => {

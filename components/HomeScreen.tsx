@@ -1,44 +1,157 @@
 import React from 'react';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { COLORS } from './theme';
 
 interface HomeScreenProps {
   onStartGame: () => void;
   onOpenSettings: () => void;
-  onOpenColorSelection: () => void;
-  onExitGame: () => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSettings, onExitGame }) => (
+const APP_VERSION = require('../app.json').expo.version as string;
+
+const GameEmblem: React.FC = () => (
+  <View style={styles.emblem} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={[styles.emblemLine, styles.emblemLineTop]} />
+    <View style={[styles.emblemLine, styles.emblemLineBottom]} />
+    <View style={[styles.emblemLine, styles.emblemLineLeft]} />
+    <View style={[styles.emblemLine, styles.emblemLineRight]} />
+    <View style={[styles.emblemDot, styles.dotTopLeft]} />
+    <View style={[styles.emblemDot, styles.dotTopRight]} />
+    <View style={[styles.emblemDot, styles.dotBottomLeft]} />
+    <View style={[styles.emblemDot, styles.dotBottomRight]} />
+  </View>
+);
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSettings }) => (
   <SafeAreaView style={styles.container}>
-    <View style={styles.hero}>
-      <View style={styles.accent} />
-      <Text style={styles.title}>لعبة النقاط والمربعات</Text>
-      <Text style={styles.subtitle}>استمتع باللعب! 🎯</Text>
+    <View style={styles.content}>
+      <GameEmblem />
+      <Text style={styles.title}>Gamelok</Text>
+      <Text style={styles.subtitle}>لعبة النقاط والمربعات</Text>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.button, styles.primaryButton]}
+          onPress={onStartGame}
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel="ابدأ اللعب"
+        >
+          <Text style={styles.primaryButtonText}>ابدأ اللعب</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, styles.secondaryButton]}
+          onPress={onOpenSettings}
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel="الإعدادات"
+        >
+          <Text style={styles.secondaryButtonText}>الإعدادات</Text>
+        </TouchableOpacity>
+      </View>
     </View>
-    <View style={styles.menuContainer}>
-      <TouchableOpacity style={[styles.menuButton, styles.startButton]} onPress={onStartGame} accessibilityRole="button">
-        <Text style={styles.menuButtonText}>🎮 بدء اللعبة</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.menuButton, styles.settingsButton]} onPress={onOpenSettings} accessibilityRole="button">
-        <Text style={styles.menuButtonText}>⚙️ الإعدادات</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.menuButton, styles.exitButton]} onPress={onExitGame} accessibilityRole="button">
-        <Text style={styles.menuButtonText}>🚪 الخروج</Text>
-      </TouchableOpacity>
-    </View>
+    <Text style={styles.version}>الإصدار {APP_VERSION}</Text>
   </SafeAreaView>
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 24 },
-  hero: { width: '100%', maxWidth: 770, alignItems: 'center', paddingVertical: 18, paddingHorizontal: 20, backgroundColor: 'rgba(7, 20, 51, 0.78)', borderColor: 'rgba(113, 207, 255, 0.25)', borderWidth: 1, borderRadius: 26, shadowColor: '#020716', shadowOpacity: 0.38, shadowRadius: 20, elevation: 8 },
-  accent: { width: 72, height: 4, borderRadius: 2, backgroundColor: '#22D3EE', marginBottom: 12 },
-  title: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', writingDirection: 'rtl' },
-  subtitle: { marginTop: 8, fontSize: 16, color: '#B8D8F3', textAlign: 'center', writingDirection: 'rtl' },
-  menuContainer: { width: '100%', maxWidth: 770, flexDirection: 'row', gap: 12 },
-  menuButton: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderWidth: 1, paddingHorizontal: 10, shadowColor: '#020716', shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
-  startButton: { backgroundColor: '#0796B6', borderColor: '#57E8FA' },
-  settingsButton: { backgroundColor: '#6040C9', borderColor: '#A78BFA' },
-  exitButton: { backgroundColor: 'rgba(9, 25, 60, 0.88)', borderColor: 'rgba(255, 122, 26, 0.7)' },
-  menuButtonText: { color: '#FFFFFF', fontSize: 19, fontWeight: '800', textAlign: 'center', writingDirection: 'rtl' },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 660,
+    alignItems: 'center',
+  },
+  emblem: {
+    width: 76,
+    height: 48,
+    marginBottom: 6,
+  },
+  emblemLine: {
+    position: 'absolute',
+    backgroundColor: COLORS.neutralLine,
+    borderRadius: 2,
+  },
+  emblemLineTop: { left: 10, right: 10, top: 8, height: 3 },
+  emblemLineBottom: { left: 10, right: 10, bottom: 8, height: 3 },
+  emblemLineLeft: { left: 8, top: 10, bottom: 10, width: 3 },
+  emblemLineRight: { right: 8, top: 10, bottom: 10, width: 3 },
+  emblemDot: {
+    position: 'absolute',
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: COLORS.gold,
+    borderWidth: 2,
+    borderColor: COLORS.background,
+  },
+  dotTopLeft: { left: 4, top: 4 },
+  dotTopRight: { right: 4, top: 4 },
+  dotBottomLeft: { left: 4, bottom: 4 },
+  dotBottomRight: { right: 4, bottom: 4 },
+  title: {
+    color: COLORS.gold,
+    fontSize: 44,
+    lineHeight: 50,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: COLORS.mutedText,
+    fontSize: 18,
+    lineHeight: 26,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: 2,
+  },
+  actions: {
+    width: '100%',
+    flexDirection: 'row-reverse',
+    gap: 12,
+    marginTop: 22,
+  },
+  button: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderWidth: 1,
+  },
+  primaryButton: {
+    backgroundColor: COLORS.emerald,
+    borderColor: '#34D399',
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.board,
+    borderColor: COLORS.gold,
+  },
+  primaryButtonText: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '800',
+    writingDirection: 'rtl',
+  },
+  secondaryButtonText: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '700',
+    writingDirection: 'rtl',
+  },
+  version: {
+    position: 'absolute',
+    bottom: 10,
+    color: COLORS.mutedText,
+    fontSize: 11,
+    writingDirection: 'rtl',
+  },
 });

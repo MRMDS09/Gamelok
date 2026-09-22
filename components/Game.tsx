@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Rect } from 'react-native-svg';
 import { useAudioManager } from './AudioManager';
+import { COLORS } from './theme';
 
 // --- Interfaces (تعريف أنواع البيانات) ---
 export interface Player {
@@ -92,6 +93,7 @@ const isEdgeSelected = (edge: Edge, horizontalLines: GameState['horizontalLines'
 // --- The Main Game Component (المكون الرئيسي للعبة) ---
 interface GameProps {
   onBackToHome?: () => void;
+  onOpenSettings?: () => void;
   player1Color?: string;
   player2Color?: string;
   onGameEnd?: (players: {id: number, name: string, score: number, color: string}[]) => void;
@@ -99,15 +101,16 @@ interface GameProps {
 
 export const Game: React.FC<GameProps> = ({ 
   onBackToHome, 
-  player1Color = '#d32f2f', 
-  player2Color = '#1976d2',
+  onOpenSettings,
+  player1Color = COLORS.playerRed,
+  player2Color = COLORS.playerBlue,
   onGameEnd
 }) => {
   const { playClickSound, playBoxCompleteSound, playGameOverSound } = useAudioManager();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const sidePanelWidth = Math.min(380, Math.max(220,
-    Math.min(300, layout.width * 0.38) + Math.max(0, windowWidth - 900) * 0.2,
+  const sidePanelWidth = Math.min(340, Math.max(228,
+    Math.min(284, layout.width * 0.36) + Math.max(0, windowWidth - 900) * 0.15,
   ));
   const availableBoardWidth = Math.max(0, layout.width - 32 - 8 - sidePanelWidth - BOARD_TOUCH_PADDING * 2);
   const availableBoardHeight = Math.max(0, layout.height - 16 - BOARD_TOUCH_PADDING * 2);
@@ -131,9 +134,9 @@ export const Game: React.FC<GameProps> = ({
   const boardEdges = createBoardEdges(cellSize, BOARD_INSET);
   const controlHeight = layout.height || windowHeight;
   const controlGap = Math.max(5, Math.min(14, controlHeight * 0.02));
-  const playerCardHeight = Math.max(56, Math.min(84, controlHeight * 0.18));
+  const playerCardHeight = Math.max(64, Math.min(78, controlHeight * 0.17));
   const turnBadgeHeight = Math.max(42, Math.min(58, controlHeight * 0.12));
-  const actionHeight = Math.max(48, Math.min(68, controlHeight * 0.14));
+  const actionHeight = Math.max(44, Math.min(54, controlHeight * 0.12));
   const compactControls = controlHeight < 410;
   
   // --- State Management (إدارة حالة اللعبة) ---
@@ -246,6 +249,25 @@ export const Game: React.FC<GameProps> = ({
     setGameState(createInitialState());
   };
 
+  const requestResetGame = () => {
+    const hasProgress = gameState.horizontalLines.some((row) => row.some((edge) => edge !== false))
+      || gameState.verticalLines.some((row) => row.some((edge) => edge !== false));
+
+    if (!hasProgress || gameState.gameOver) {
+      resetGame();
+      return;
+    }
+
+    Alert.alert(
+      'بدء لعبة جديدة',
+      'سيتم حذف تقدم المباراة الحالية.',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'بدء جديد', style: 'destructive', onPress: resetGame },
+      ],
+    );
+  };
+
   // --- Rendering Logic (منطق العرض) ---
   const dots: { id: string; cx: number; cy: number }[] = [];
   for (let row = 0; row <= BOX_ROWS; row++) {
@@ -338,7 +360,7 @@ export const Game: React.FC<GameProps> = ({
                   y1={BOARD_INSET + r * cellSize}
                   x2={BOARD_INSET + (c + 1) * cellSize}
                   y2={BOARD_INSET + r * cellSize}
-                  stroke="#ddd"
+                  stroke={COLORS.neutralLine}
                   strokeWidth={lineThickness}
                   strokeLinecap="round"
                 />
@@ -356,7 +378,7 @@ export const Game: React.FC<GameProps> = ({
                   y1={BOARD_INSET + r * cellSize}
                   x2={BOARD_INSET + c * cellSize}
                   y2={BOARD_INSET + (r + 1) * cellSize}
-                  stroke="#ddd"
+                  stroke={COLORS.neutralLine}
                   strokeWidth={lineThickness}
                   strokeLinecap="round"
                 />
@@ -368,7 +390,7 @@ export const Game: React.FC<GameProps> = ({
 
           {/* رسم النقاط */}
           {dots.map(dot => (
-            <Circle key={dot.id} pointerEvents="none" cx={dot.cx} cy={dot.cy} r={dotRadius} fill="#333" />
+            <Circle key={dot.id} pointerEvents="none" cx={dot.cx} cy={dot.cy} r={dotRadius} fill={COLORS.text} />
           ))}
         </Svg>
           <Pressable
@@ -381,41 +403,67 @@ export const Game: React.FC<GameProps> = ({
       </View>
 
       <View style={[styles.sidePanel, { width: sidePanelWidth, gap: controlGap }]}>
+        <View style={styles.topActions}>
+          {onOpenSettings && (
+            <TouchableOpacity
+              style={styles.topActionButton}
+              onPress={onOpenSettings}
+              accessibilityRole="button"
+              accessibilityLabel="فتح الإعدادات"
+            >
+              <Text style={styles.topActionText}>⚙ الإعدادات</Text>
+            </TouchableOpacity>
+          )}
+          {onBackToHome && (
+            <TouchableOpacity
+              style={styles.topActionButton}
+              onPress={onBackToHome}
+              accessibilityRole="button"
+              accessibilityLabel="العودة إلى الرئيسية"
+            >
+              <Text style={styles.topActionText}>⌂ الرئيسية</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={[
+          styles.turnBadge,
+          {
+            minHeight: turnBadgeHeight,
+            borderColor: gameState.players[gameState.currentPlayer].color,
+            backgroundColor: gameState.players[gameState.currentPlayer].color + '24',
+          },
+        ]}>
+          <View style={[
+            styles.turnColorIndicator,
+            { backgroundColor: gameState.players[gameState.currentPlayer].color },
+          ]} />
+          <Text style={[styles.turnText, compactControls && styles.compactTurnText]} numberOfLines={1}>
+            دور {gameState.players[gameState.currentPlayer].name}
+          </Text>
+        </View>
         <View style={[styles.playersInfo, { gap: controlGap }]}>
           {gameState.players.map((player, index) => (
             <View key={player.id} style={[
               styles.playerCard,
               {
                 minHeight: playerCardHeight,
-                backgroundColor: index === 0 ? 'rgba(8, 34, 70, 0.88)' : 'rgba(36, 22, 76, 0.88)',
-                borderColor: index === 0 ? '#22D3EE' : '#8B5CF6',
-                shadowColor: index === 0 ? '#22D3EE' : '#8B5CF6',
+                borderColor: player.color,
               },
               gameState.currentPlayer === index && styles.currentPlayer,
             ]}>
+              <View style={styles.playerIdentity}>
+                <View style={[styles.playerColorIndicator, { backgroundColor: player.color }]} />
+                <Text style={[styles.playerName, compactControls && styles.compactPlayerName]} numberOfLines={1}>
+                  اللاعب {index + 1}
+                </Text>
+              </View>
               <Text style={[styles.playerScore, compactControls && styles.compactScore]}>{player.score}</Text>
-              <View style={styles.playerSeparator} />
-              <Text style={[styles.playerName, compactControls && styles.compactPlayerName]} numberOfLines={1}>{player.name}</Text>
-              <View style={[styles.playerColorIndicator, { backgroundColor: player.color }]} />
             </View>
           ))}
         </View>
-        <View style={[styles.turnBadge, { minHeight: turnBadgeHeight }]}>
-          <Text style={[styles.turnText, compactControls && styles.compactTurnText]} numberOfLines={1}>
-            دور {gameState.players[gameState.currentPlayer].name}
-          </Text>
-        </View>
-        {gameState.gameOver && (
-          <Text style={styles.gameOverText}>انتهت اللعبة!</Text>
-        )}
-        <TouchableOpacity style={[styles.resetButton, { minHeight: actionHeight }]} onPress={resetGame}>
+        <TouchableOpacity style={[styles.resetButton, { minHeight: actionHeight }]} onPress={requestResetGame}>
           <Text style={[styles.resetButtonText, compactControls && styles.compactActionText]}>لعبة جديدة</Text>
         </TouchableOpacity>
-        {onBackToHome && (
-          <TouchableOpacity style={[styles.backButton, { minHeight: actionHeight }]} onPress={onBackToHome}>
-            <Text style={[styles.backButtonText, compactControls && styles.compactActionText]}>← الرئيسية</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
     </SafeAreaView>
@@ -426,6 +474,7 @@ export const Game: React.FC<GameProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
   screen: {
     flex: 1,
@@ -446,80 +495,114 @@ const styles = StyleSheet.create({
   sidePanel: {
     alignSelf: 'stretch',
     justifyContent: 'center',
+    backgroundColor: COLORS.panel,
+    borderColor: '#2B354D',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 10,
   },
-  backButton: {
+  topActions: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+  },
+  topActionButton: {
+    flex: 1,
+    minHeight: 42,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#2196F3',
-    borderRadius: 24,
-    shadowColor: '#2196F3',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.38,
-    shadowRadius: 10,
-    elevation: 7,
+    backgroundColor: COLORS.board,
+    borderColor: COLORS.neutralLine,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 6,
   },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    writingDirection: 'rtl',
-  },
-  playersInfo: {},
-  playerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    borderRadius: 22,
-    borderWidth: 3,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.27,
-    shadowRadius: 12,
-    elevation: 7,
-  },
-  currentPlayer: {
-    shadowOpacity: 0.48,
-    elevation: 10,
-  },
-  playerColorIndicator: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: '#FFFFFF',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  playerSeparator: { width: 1, height: 28, backgroundColor: 'rgba(222, 238, 255, 0.35)', marginHorizontal: 16 },
-  playerName: {
-    flex: 1,
-    fontSize: 19,
+  topActionText: {
+    color: COLORS.text,
+    fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
-    color: '#FFFFFF',
+    writingDirection: 'rtl',
+  },
+  playersInfo: {
+    flexDirection: 'row',
+  },
+  playerCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.board,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  currentPlayer: {
+    borderWidth: 2,
+  },
+  playerColorIndicator: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: COLORS.text,
+  },
+  playerIdentity: {
+    width: '100%',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  playerName: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: COLORS.mutedText,
     writingDirection: 'rtl',
   },
   playerScore: {
-    minWidth: 34,
     fontSize: 28,
     fontWeight: '800',
     textAlign: 'center',
-    color: '#FFFFFF',
+    color: COLORS.text,
   },
   compactScore: { fontSize: 24 },
-  compactPlayerName: { fontSize: 17 },
-  turnBadge: { backgroundColor: '#22C55E', borderRadius: 23, alignItems: 'center', justifyContent: 'center', shadowColor: '#22C55E', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.32, shadowRadius: 10, elevation: 6 },
-  turnText: { fontSize: 19, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', writingDirection: 'rtl', paddingHorizontal: 12 },
-  compactTurnText: { fontSize: 17 },
+  compactPlayerName: { fontSize: 12 },
+  turnBadge: {
+    flexDirection: 'row-reverse',
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  turnColorIndicator: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderColor: COLORS.text,
+    borderWidth: 1,
+  },
+  turnText: {
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  compactTurnText: { fontSize: 14 },
   boardContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    shadowColor: '#06112F',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    backgroundColor: COLORS.board,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#353941',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 5,
   },
   boardSurface: {
     direction: 'ltr',
@@ -533,29 +616,20 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 1,
   },
-  gameOverText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFB06C',
-    textAlign: 'center',
-  },
   resetButton: {
-    backgroundColor: '#FF6B1A',
+    backgroundColor: COLORS.board,
+    borderColor: COLORS.gold,
+    borderWidth: 1,
     justifyContent: 'center',
     paddingHorizontal: 16,
-    borderRadius: 24,
+    borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#FF6B1A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.38,
-    shadowRadius: 10,
-    elevation: 7,
   },
   resetButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '700',
     writingDirection: 'rtl',
   },
-  compactActionText: { fontSize: 16 },
+  compactActionText: { fontSize: 14 },
 });

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { COLORS } from './theme';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -50,7 +51,6 @@ const SteppedVolumeControl: React.FC<{
   source: 'music' | 'click';
 }> = ({ value, onValueChange, onValueComplete, testID, source }) => {
   const stepIndex = Math.max(0, Math.min(10, Math.round(clampVolume(value) * 10)));
-  const selectedValue = stepIndex / 10;
 
   const handleSelectStep = (index: number) => {
     const uiVolume = index / 10;
@@ -67,7 +67,6 @@ const SteppedVolumeControl: React.FC<{
       testID={testID}
       nativeID={testID}
     >
-      <Text style={styles.volumePercentage}>{Math.round(selectedValue * 100)}%</Text>
       <View style={styles.volumePointsRow}>
         {Array.from({ length: 11 }, (_, index) => {
           const percentage = index * 10;
@@ -77,7 +76,10 @@ const SteppedVolumeControl: React.FC<{
           return (
             <Pressable
               key={index}
-              style={styles.volumePointCell}
+              style={({ pressed }) => [
+                styles.volumePointCell,
+                pressed && styles.volumePointCellPressed,
+              ]}
               onPress={() => handleSelectStep(index)}
               accessibilityRole="radio"
               accessibilityLabel={`مستوى الصوت ${percentage}%`}
@@ -160,127 +162,96 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
-  const SettingItem = ({ 
-    title, 
-    description, 
-    children 
-  }: { 
-    title: string; 
-    description: string; 
-    children: React.ReactNode;
-  }) => (
-    <View style={styles.settingItem}>
-      <View style={styles.settingInfo}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        <Text style={styles.settingDescription}>{description}</Text>
-      </View>
-      <View style={styles.settingControl}>
-        {children}
-      </View>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Text style={styles.backButtonText}>← رجوع</Text>
-        </TouchableOpacity>
+      <View style={styles.panel}>
         <Text style={styles.title}>الإعدادات</Text>
-      </View>
 
-      <View style={styles.content}>
-        <View style={styles.settingsGrid}>
-        {/* إعدادات الموسيقى الخلفية */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎵 الموسيقى الخلفية</Text>
-          
-          <SettingItem
-            title="تفعيل الموسيقى الخلفية"
-            description="تشغيل موسيقى خلفية أثناء اللعب"
-          >
+        <View style={styles.audioRow}>
+          <View style={styles.audioInfo}>
+            <Text style={styles.audioIcon}>♪</Text>
+            <View style={styles.audioCopy}>
+              <Text style={styles.audioTitle}>صوت الموسيقى</Text>
+              <Text style={styles.audioPercentage}>{Math.round(settings.backgroundMusicVolume * 100)}%</Text>
+            </View>
+          </View>
+          <View style={styles.switchCell}>
             <Switch
               value={settings.backgroundMusicEnabled}
               onValueChange={(value) => updateSetting('backgroundMusicEnabled', value)}
-              trackColor={{ false: '#52627E', true: '#22D3EE' }}
-              thumbColor={settings.backgroundMusicEnabled ? '#fff' : '#f4f3f4'}
+              trackColor={{ false: COLORS.mutedControl, true: COLORS.emerald }}
+              thumbColor={COLORS.text}
+              accessibilityLabel="تفعيل صوت الموسيقى"
             />
-          </SettingItem>
-
+          </View>
           {settings.backgroundMusicEnabled && (
-            <SettingItem
-              title="مستوى الصوت"
-              description={`${Math.round(settings.backgroundMusicVolume * 100)}%`}
-            >
-              <SteppedVolumeControl
-                key="background-music-volume"
-                testID="background-music-volume"
-                source="music"
-                value={settings.backgroundMusicVolume}
-                onValueChange={handleBackgroundMusicVolumeChange}
-              />
-            </SettingItem>
+            <SteppedVolumeControl
+              key="background-music-volume"
+              testID="background-music-volume"
+              source="music"
+              value={settings.backgroundMusicVolume}
+              onValueChange={handleBackgroundMusicVolumeChange}
+            />
           )}
         </View>
 
-        {/* إعدادات الأصوات */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔊 الأصوات</Text>
-          
-          <SettingItem
-            title="أصوات النقر"
-            description="تشغيل صوت عند رسم الخطوط"
-          >
+        <View style={styles.audioRow}>
+          <View style={styles.audioInfo}>
+            <Text style={styles.audioIcon}>◉</Text>
+            <View style={styles.audioCopy}>
+              <Text style={styles.audioTitle}>صوت النقر</Text>
+              <Text style={styles.audioPercentage}>{Math.round(settings.clickSoundVolume * 100)}%</Text>
+            </View>
+          </View>
+          <View style={styles.switchCell}>
             <Switch
               value={settings.clickSoundsEnabled}
               onValueChange={(value) => updateSetting('clickSoundsEnabled', value)}
-              trackColor={{ false: '#52627E', true: '#22D3EE' }}
-              thumbColor={settings.clickSoundsEnabled ? '#fff' : '#f4f3f4'}
+              trackColor={{ false: COLORS.mutedControl, true: COLORS.emerald }}
+              thumbColor={COLORS.text}
+              accessibilityLabel="تفعيل صوت النقر"
             />
-          </SettingItem>
-
+          </View>
           {settings.clickSoundsEnabled && (
-            <SettingItem
-              title="مستوى صوت النقر"
-              description={`${Math.round(settings.clickSoundVolume * 100)}%`}
-            >
-              <SteppedVolumeControl
-                key="click-sound-volume"
-                testID="click-sound-volume"
-                source="click"
-                value={settings.clickSoundVolume}
-                onValueChange={handleClickSoundVolumeChange}
-                onValueComplete={handleClickSoundVolumeComplete}
-              />
-            </SettingItem>
+            <SteppedVolumeControl
+              key="click-sound-volume"
+              testID="click-sound-volume"
+              source="click"
+              value={settings.clickSoundVolume}
+              onValueChange={handleClickSoundVolumeChange}
+              onValueComplete={handleClickSoundVolumeComplete}
+            />
           )}
+        </View>
 
-          <SettingItem
-            title="التأثيرات الصوتية"
-            description="تشغيل أصوات إضافية للعبة"
-          >
+        <View style={styles.effectsRow}>
+          <View style={styles.effectsCopy}>
+            <Text style={styles.effectsTitle}>التأثيرات الصوتية</Text>
+            <Text style={styles.effectsDescription}>صوت اكتمال المربع ونهاية اللعبة</Text>
+          </View>
+          <View style={styles.switchCell}>
             <Switch
               value={settings.soundEffectsEnabled}
               onValueChange={(value) => updateSetting('soundEffectsEnabled', value)}
-              trackColor={{ false: '#52627E', true: '#22D3EE' }}
-              thumbColor={settings.soundEffectsEnabled ? '#fff' : '#f4f3f4'}
+              trackColor={{ false: COLORS.mutedControl, true: COLORS.emerald }}
+              thumbColor={COLORS.text}
+              accessibilityLabel="تفعيل التأثيرات الصوتية"
             />
-          </SettingItem>
+          </View>
         </View>
 
+        <View style={styles.actions}>
+          <TouchableOpacity style={[styles.actionButton, styles.saveButton]} onPress={handleSave} activeOpacity={0.82}>
+            <Text style={styles.actionButtonText}>حفظ</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, styles.resetButton]} onPress={handleReset} activeOpacity={0.82}>
+            <Text style={styles.actionButtonText}>إعادة التعيين</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, styles.backButton]} onPress={handleBack} activeOpacity={0.82}>
+            <Text style={styles.actionButtonText}>رجوع</Text>
+          </TouchableOpacity>
         </View>
-        {/* إعادة تعيين الإعدادات */}
-        <TouchableOpacity 
-          style={styles.resetButton}
-          onPress={handleReset}
-        >
-          <Text style={styles.resetButtonText}>🔄 إعادة تعيين الإعدادات</Text>
-        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-        <Text style={styles.saveButtonText}>💾 حفظ الإعدادات</Text>
-      </TouchableOpacity>
     </SafeAreaView>
   );
 };
@@ -288,108 +259,78 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
+    backgroundColor: COLORS.background,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 6,
-    gap: 14,
-  },
-  backButton: {
-    minWidth: 86,
-    minHeight: 44,
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(9, 25, 60, 0.82)',
-    borderWidth: 1,
-    borderColor: 'rgba(34, 211, 238, 0.35)',
-    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  backButtonText: {
-    fontSize: 16,
-    color: '#B9F5FF',
-    fontWeight: 'bold',
+  panel: {
+    width: '100%',
+    maxWidth: 1060,
+    backgroundColor: COLORS.panel,
+    borderWidth: 1,
+    borderColor: '#2B354D',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   title: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    lineHeight: 28,
+    fontWeight: '800',
+    color: COLORS.gold,
     writingDirection: 'rtl',
+    textAlign: 'center',
+    marginBottom: 6,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  settingsGrid: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-  },
-  section: {
-    flex: 1,
-    backgroundColor: 'rgba(7, 20, 51, 0.84)',
-    borderColor: 'rgba(130, 194, 255, 0.22)',
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 10,
-    shadowColor: '#020716',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#B9F5FF',
-    marginBottom: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  settingItem: {
+  audioRow: {
+    minHeight: 76,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 52,
-    paddingVertical: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(170, 215, 255, 0.13)',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#273149',
   },
-  settingInfo: {
-    flex: 1,
-    marginLeft: 4,
-  },
-  settingTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  settingDescription: {
-    fontSize: 11,
-    color: '#B8CBE0',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  settingControl: {
-    minWidth: 50,
+  audioInfo: {
+    width: 136,
+    flexDirection: 'row-reverse',
     alignItems: 'center',
+    gap: 8,
+  },
+  audioIcon: {
+    width: 26,
+    color: COLORS.gold,
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  audioCopy: {
+    flex: 1,
+  },
+  audioTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  audioPercentage: {
+    color: COLORS.gold,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  switchCell: {
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   steppedVolumeControl: {
-    width: 297,
-    minHeight: 70,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 58,
     alignItems: 'stretch',
-  },
-  volumePercentage: {
-    color: '#B9F5FF',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 2,
   },
   volumePointsRow: {
     height: 44,
@@ -402,73 +343,92 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  volumePointCellPressed: {
+    opacity: 0.62,
+  },
   volumePoint: {
-    width: 12,
-    height: 12,
+    width: 11,
+    height: 11,
     borderRadius: 6,
   },
   volumePointActive: {
-    backgroundColor: '#22D3EE',
+    backgroundColor: COLORS.mutedText,
   },
   volumePointInactive: {
-    backgroundColor: '#52627E',
+    backgroundColor: COLORS.mutedControl,
   },
   volumePointSelected: {
     width: 18,
     height: 18,
     borderRadius: 9,
     borderWidth: 2,
-    borderColor: '#B9F5FF',
-    shadowColor: '#22D3EE',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-    elevation: 5,
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.gold,
   },
   volumeEndpointLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: -2,
+    marginTop: -4,
+    paddingHorizontal: 4,
   },
   volumeEndpointText: {
-    color: '#B8CBE0',
+    color: COLORS.mutedText,
     fontSize: 10,
   },
-  resetButton: {
-    backgroundColor: 'rgba(9, 25, 60, 0.86)',
-    borderColor: 'rgba(255, 122, 26, 0.65)',
-    borderWidth: 1,
-    minHeight: 44,
-    paddingHorizontal: 16,
-    borderRadius: 14,
+  effectsRow: {
+    minHeight: 48,
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#273149',
+  },
+  effectsCopy: {
+    flex: 1,
+  },
+  effectsTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  effectsDescription: {
+    color: COLORS.mutedText,
+    fontSize: 10,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  actions: {
+    flexDirection: 'row-reverse',
+    gap: 8,
     marginTop: 8,
   },
-  resetButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  saveButton: {
-    backgroundColor: '#168F48',
-    borderColor: '#54E386',
-    borderWidth: 1,
+  actionButton: {
+    flex: 1,
     minHeight: 44,
-    marginHorizontal: 16,
-    marginVertical: 7,
-    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#020716',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    borderRadius: 11,
+    borderWidth: 1,
+    paddingHorizontal: 8,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+  saveButton: {
+    backgroundColor: COLORS.emerald,
+    borderColor: '#34D399',
+  },
+  resetButton: {
+    backgroundColor: COLORS.board,
+    borderColor: COLORS.gold,
+  },
+  backButton: {
+    backgroundColor: COLORS.mutedControl,
+    borderColor: COLORS.neutralLine,
+  },
+  actionButtonText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
 });

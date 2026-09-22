@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, BackHandler, ImageBackground, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AudioManagerProvider, useAudioManager } from './components/AudioManager';
 import { ColorSelectionScreen } from './components/ColorSelectionScreen';
@@ -7,6 +7,7 @@ import { Game } from './components/Game';
 import { GameResultScreen } from './components/GameResultScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { GameSettings, SettingsScreen } from './components/SettingsScreen';
+import { COLORS } from './components/theme';
 
 type Screen = 'home' | 'game' | 'colorSelection' | 'settings' | 'gameResult';
 
@@ -32,15 +33,16 @@ const normalizeSettings = (settings: GameSettings): GameSettings => ({
 const AppContent: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('home');
   const [gameSettings, setGameSettings] = useState<GameSettings>(DEFAULT_SETTINGS);
-  const [playerColors, setPlayerColors] = useState({ player1: '#d32f2f', player2: '#1976d2' });
+  const [playerColors, setPlayerColors] = useState<{ player1: string; player2: string }>({
+    player1: COLORS.playerRed,
+    player2: COLORS.playerBlue,
+  });
   const [gameResult, setGameResult] = useState<Array<{id: number, name: string, score: number, color: string}> | null>(null);
+  const [gameSettingsOpen, setGameSettingsOpen] = useState(false);
   const { previewClickSound, updateSettings } = useAudioManager();
 
   const handleStartGame = () => {
-    setCurrentScreen('colorSelection');
-  };
-
-  const handleOpenColorSelection = () => {
+    setGameSettingsOpen(false);
     setCurrentScreen('colorSelection');
   };
 
@@ -49,36 +51,14 @@ const AppContent: React.FC = () => {
   };
 
   const handleBackToHome = () => {
+    setGameSettingsOpen(false);
     setCurrentScreen('home');
   };
 
   const handleSaveColors = (player1Color: string, player2Color: string) => {
     setPlayerColors({ player1: player1Color, player2: player2Color });
+    setGameSettingsOpen(false);
     setCurrentScreen('game');
-  };
-
-  const handleExitGame = () => {
-    Alert.alert(
-      'تأكيد الخروج',
-      'هل أنت متأكد من أنك تريد الخروج من اللعبة؟',
-      [
-        {
-          text: 'إلغاء',
-          style: 'cancel',
-        },
-        {
-          text: 'خروج',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              BackHandler.exitApp();
-            } catch (e) {
-              setCurrentScreen('home');
-            }
-          },
-        },
-      ]
-    );
   };
 
   const handleSaveSettings = (settings: GameSettings) => {
@@ -93,11 +73,13 @@ const AppContent: React.FC = () => {
 
   const handleGameEnd = (players: Array<{id: number, name: string, score: number, color: string}>) => {
     setGameResult(players);
+    setGameSettingsOpen(false);
     setCurrentScreen('gameResult');
   };
 
   const handlePlayAgain = () => {
     setGameResult(null);
+    setGameSettingsOpen(false);
     setCurrentScreen('game');
   };
 
@@ -108,19 +90,31 @@ const AppContent: React.FC = () => {
           <HomeScreen
             onStartGame={handleStartGame}
             onOpenSettings={handleOpenSettings}
-            onOpenColorSelection={handleOpenColorSelection}
-            onExitGame={handleExitGame}
           />
         );
       
       case 'game':
         return (
-          <Game
-            onBackToHome={handleBackToHome}
-            player1Color={playerColors.player1}
-            player2Color={playerColors.player2}
-            onGameEnd={handleGameEnd}
-          />
+          <View style={styles.screenStack}>
+            <Game
+              onBackToHome={handleBackToHome}
+              onOpenSettings={() => setGameSettingsOpen(true)}
+              player1Color={playerColors.player1}
+              player2Color={playerColors.player2}
+              onGameEnd={handleGameEnd}
+            />
+            {gameSettingsOpen && (
+              <View style={styles.settingsOverlay}>
+                <SettingsScreen
+                  onBack={() => setGameSettingsOpen(false)}
+                  onSaveSettings={handleSaveSettings}
+                  onPreviewSettings={handlePreviewSettings}
+                  onPreviewClickSound={previewClickSound}
+                  initialSettings={gameSettings}
+                />
+              </View>
+            )}
+          </View>
         );
       
       case 'colorSelection':
@@ -146,22 +140,36 @@ const AppContent: React.FC = () => {
       
       case 'gameResult':
         return gameResult ? (
-          <GameResultScreen
-            players={gameResult}
-            onPlayAgain={handlePlayAgain}
-            onBackToHome={handleBackToHome}
-          />
+          <View style={styles.screenStack}>
+            <GameResultScreen
+              players={gameResult}
+              onPlayAgain={handlePlayAgain}
+              onBackToHome={handleBackToHome}
+              onOpenSettings={() => setGameSettingsOpen(true)}
+            />
+            {gameSettingsOpen && (
+              <View style={styles.settingsOverlay}>
+                <SettingsScreen
+                  onBack={() => setGameSettingsOpen(false)}
+                  onSaveSettings={handleSaveSettings}
+                  onPreviewSettings={handlePreviewSettings}
+                  onPreviewClickSound={previewClickSound}
+                  initialSettings={gameSettings}
+                />
+              </View>
+            )}
+          </View>
         ) : null;
       
       default:
-        return <HomeScreen onStartGame={handleStartGame} onOpenSettings={handleOpenSettings} onOpenColorSelection={handleOpenColorSelection} onExitGame={handleExitGame} />;
+        return <HomeScreen onStartGame={handleStartGame} onOpenSettings={handleOpenSettings} />;
     }
   };
 
   return (
-    <ImageBackground source={require('./assets/gamelok-background.png')} resizeMode="cover" style={styles.container}>
+    <View style={styles.container}>
       {renderCurrentScreen()}
-    </ImageBackground>
+    </View>
   );
 };
 
@@ -177,7 +185,15 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#081535',
+    backgroundColor: COLORS.background,
+  },
+  screenStack: {
+    flex: 1,
+  },
+  settingsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: COLORS.background,
   },
 });
 

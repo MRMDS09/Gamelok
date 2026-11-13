@@ -1,253 +1,330 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { COLORS } from './theme';
 
 interface ColorSelectionScreenProps {
   onBack: () => void;
   onSaveColors: (player1Color: string, player2Color: string) => void;
+  onColorsChange?: (player1Color: string, player2Color: string) => void;
   initialPlayer1Color?: string;
   initialPlayer2Color?: string;
+  player2Label?: string;
 }
 
 const AVAILABLE_COLORS = [
-  { name: 'أحمر', value: '#d32f2f' },
-  { name: 'أزرق', value: '#1976d2' },
-  { name: 'أخضر', value: '#388e3c' },
-  { name: 'برتقالي', value: '#f57c00' },
-  { name: 'بنفسجي', value: '#7b1fa2' },
-  { name: 'وردي', value: '#c2185b' },
-  { name: 'تركوازي', value: '#0097a7' },
-  { name: 'ذهبي', value: '#f9a825' },
-  { name: 'رمادي', value: '#616161' },
-  { name: 'بني', value: '#5d4037' },
-  { name: 'أخضر فاتح', value: '#689f38' },
-  { name: 'أزرق فاتح', value: '#0288d1' },
+  { name: 'أحمر', value: COLORS.playerRed }, { name: 'أزرق', value: COLORS.playerBlue },
+  { name: 'أخضر', value: '#388E3C' }, { name: 'برتقالي', value: '#F57C00' },
+  { name: 'بنفسجي', value: '#7B1FA2' }, { name: 'وردي', value: '#C2185B' },
+  { name: 'تركوازي', value: '#0097A7' }, { name: 'ذهبي', value: '#F9A825' },
+  { name: 'رمادي', value: '#616161' }, { name: 'بني', value: '#5D4037' },
+  { name: 'أخضر فاتح', value: '#689F38' }, { name: 'أزرق فاتح', value: '#0288D1' },
 ];
 
 export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
   onBack,
   onSaveColors,
-  initialPlayer1Color = '#d32f2f',
-  initialPlayer2Color = '#1976d2',
+  onColorsChange,
+  initialPlayer1Color = COLORS.playerRed,
+  initialPlayer2Color = COLORS.playerBlue,
+  player2Label = 'اللاعب 2',
 }) => {
+  const { width, height } = useWindowDimensions();
+  const desktop = width >= 1024 && height >= 600;
   const [player1Color, setPlayer1Color] = useState(initialPlayer1Color);
   const [player2Color, setPlayer2Color] = useState(initialPlayer2Color);
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const sameColor = player1Color === player2Color;
+  const swatchSize = Math.max(20, Math.min(desktop ? 56 : 38,
+    Math.floor((layout.width - 96) / 8) - 12,
+    Math.floor((layout.height - 130) / 3) - 16,
+  ));
 
-  const handleSave = () => {
-    onSaveColors(player1Color, player2Color);
-    // سيتم الانتقال للعبة تلقائياً من App.tsx
-  };
+  const renderPlayerPanel = (
+    playerLabel: string,
+    selectedColor: string,
+    unavailableColor: string,
+    onSelect: (color: string) => void,
+  ) => (
+    <View style={[styles.playerPanel, desktop && desktopStyles.playerPanel]}>
+      <View style={styles.playerHeading}>
+        <View style={[styles.playerColorIndicator, { backgroundColor: selectedColor }]} />
+        <View style={styles.playerHeadingText}>
+          <Text style={styles.playerName}>{playerLabel}</Text>
+          <Text style={styles.chooseLabel}>اختر اللون</Text>
+        </View>
+      </View>
 
-  const ColorButton = ({ color, isSelected, onPress }: { 
-    color: { name: string; value: string }; 
-    isSelected: boolean; 
-    onPress: () => void;
-  }) => (
-    <TouchableOpacity
-      style={[
-        styles.colorButton,
-        { backgroundColor: color.value },
-        isSelected && styles.selectedColorButton,
-      ]}
-      onPress={onPress}
-    >
-      <Text style={[styles.colorName, { color: isSelected ? '#fff' : '#333' }]}>
-        {color.name}
-      </Text>
-    </TouchableOpacity>
+      <View style={[styles.colorGrid, desktop && desktopStyles.colorGrid]}>
+        {AVAILABLE_COLORS.map((color) => {
+          const isSelected = selectedColor === color.value;
+          const isUnavailable = unavailableColor === color.value && !isSelected;
+          return (
+            <TouchableOpacity
+              key={color.value}
+              style={[styles.colorOption, desktop && desktopStyles.colorOption, isUnavailable && styles.unavailableOption]}
+              onPress={() => onSelect(color.value)}
+              disabled={isUnavailable}
+              activeOpacity={0.75}
+              accessibilityRole="radio"
+              accessibilityLabel={`${playerLabel}: ${color.name}`}
+              accessibilityState={{ selected: isSelected, disabled: isUnavailable }}
+            >
+              <View
+                style={[
+                  styles.swatch,
+                  {
+                    width: swatchSize,
+                    height: swatchSize,
+                    borderRadius: swatchSize / 2,
+                    backgroundColor: color.value,
+                  },
+                  isSelected && styles.selectedSwatch,
+                ]}
+              />
+              <Text style={[styles.colorName, desktop && desktopStyles.colorName]} numberOfLines={1} adjustsFontSizeToFit>
+                {color.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>← رجوع</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>اختيار الألوان</Text>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* اللاعب الأول */}
-        <View style={styles.playerSection}>
-          <View style={[styles.playerPreview, { backgroundColor: player1Color + '20', borderColor: player1Color }]}>
-            <View style={[styles.playerColorIndicator, { backgroundColor: player1Color }]} />
-            <Text style={[styles.playerName, { color: player1Color }]}>اللاعب الأول</Text>
-          </View>
-          
-          <Text style={styles.sectionTitle}>اختر لون اللاعب الأول:</Text>
-          <View style={styles.colorGrid}>
-            {AVAILABLE_COLORS.map((color) => (
-              <ColorButton
-                key={color.value}
-                color={color}
-                isSelected={player1Color === color.value}
-                onPress={() => setPlayer1Color(color.value)}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* اللاعب الثاني */}
-        <View style={styles.playerSection}>
-          <View style={[styles.playerPreview, { backgroundColor: player2Color + '20', borderColor: player2Color }]}>
-            <View style={[styles.playerColorIndicator, { backgroundColor: player2Color }]} />
-            <Text style={[styles.playerName, { color: player2Color }]}>اللاعب الثاني</Text>
-          </View>
-          
-          <Text style={styles.sectionTitle}>اختر لون اللاعب الثاني:</Text>
-          <View style={styles.colorGrid}>
-            {AVAILABLE_COLORS.map((color) => (
-              <ColorButton
-                key={color.value}
-                color={color}
-                isSelected={player2Color === color.value}
-                onPress={() => setPlayer2Color(color.value)}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* تحذير إذا كان اللونان متشابهان */}
-        {player1Color === player2Color && (
-          <View style={styles.warningContainer}>
-            <Text style={styles.warningText}>⚠️ لا يمكن للاعبين أن يكون لهما نفس اللون!</Text>
-          </View>
-        )}
-      </ScrollView>
-
-      <TouchableOpacity 
-        style={[styles.saveButton, player1Color === player2Color && styles.disabledButton]} 
-        onPress={handleSave}
-        disabled={player1Color === player2Color}
+    <SafeAreaView style={styles.container}>
+      <View
+        style={[styles.screen, desktop && desktopStyles.screen]}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          setLayout((previous) => previous.width === width && previous.height === height
+            ? previous
+            : { width, height });
+        }}
       >
-        <Text style={styles.saveButtonText}>💾 حفظ الألوان</Text>
-      </TouchableOpacity>
-    </View>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onBack}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="الرجوع إلى الرئيسية"
+          >
+            <Text style={styles.backButtonText}>الرجوع</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>اختر ألوان اللاعبين</Text>
+            <Text style={styles.subtitle}>لكل لاعب لون مختلف وواضح على اللوحة</Text>
+          </View>
+        </View>
+
+        <View style={styles.panels}>
+          {renderPlayerPanel('اللاعب 1', player1Color, player2Color, (color) => {
+            setPlayer1Color(color);
+            onColorsChange?.(color, player2Color);
+          })}
+          {renderPlayerPanel(player2Label, player2Color, player1Color, (color) => {
+            setPlayer2Color(color);
+            onColorsChange?.(player1Color, color);
+          })}
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.warningText} numberOfLines={1}>
+            {sameColor ? 'اختر لونين مختلفين للمتابعة' : 'تُحفظ الألوان تلقائياً على هذا الجهاز'}
+          </Text>
+          <TouchableOpacity
+            style={[styles.startButton, sameColor && styles.disabledButton]}
+            onPress={() => onSaveColors(player1Color, player2Color)}
+            disabled={sameColor}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="ابدأ اللعبة"
+            accessibilityState={{ disabled: sameColor }}
+          >
+            <Text style={styles.startButtonText}>ابدأ اللعبة</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f7',
+    backgroundColor: COLORS.background,
+  },
+  screen: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   header: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
+    gap: 14,
+    marginBottom: 8,
   },
   backButton: {
-    padding: 10,
-    marginRight: 15,
+    minWidth: 92,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.board,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.gold,
+    paddingHorizontal: 14,
   },
   backButtonText: {
-    fontSize: 18,
-    color: '#3498db',
-    fontWeight: 'bold',
+    fontSize: 15,
+    color: COLORS.text,
+    fontWeight: '700',
+    writingDirection: 'rtl',
+  },
+  headerCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontSize: 22,
+    lineHeight: 28,
+    color: COLORS.gold,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  content: {
+  subtitle: {
+    color: COLORS.mutedText,
+    fontSize: 12,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  panels: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
-  playerSection: {
-    marginBottom: 0,
-  },
-  playerPreview: {
     flexDirection: 'row',
+    gap: 10,
+    minHeight: 0,
+  },
+  playerPanel: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: COLORS.panel,
+    borderColor: '#2B354D',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  playerHeading: {
+    minHeight: 42,
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    padding: 0,
-    borderRadius: 15,
-    borderWidth: 3,
-    marginBottom: 15,
+    gap: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#273149',
+    paddingBottom: 7,
   },
   playerColorIndicator: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 15,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: COLORS.text,
+  },
+  playerHeadingText: {
+    flex: 1,
   },
   playerName: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 10,
+  chooseLabel: {
+    fontSize: 11,
+    color: COLORS.mutedText,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   colorGrid: {
+    flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 5,
+    alignContent: 'center',
+    paddingTop: 3,
   },
-  colorButton: {
-    width: '22%',
-    aspectRatio: 1,
-    borderRadius: 12,
+  colorOption: {
+    width: '25%',
+    minHeight: 45,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-    marginHorizontal: 2,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    paddingVertical: 2,
   },
-  selectedColorButton: {
-    borderColor: '#fff',
-    transform: [{ scale: 1.1 }],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 6,
+  unavailableOption: {
+    opacity: 0.24,
+  },
+  swatch: {
+    borderWidth: 2,
+    borderColor: '#6B7280',
+  },
+  selectedSwatch: {
+    borderColor: COLORS.gold,
+    borderWidth: 2,
+    transform: [{ scale: 1.12 }],
   },
   colorName: {
     fontSize: 10,
-    fontWeight: 'bold',
+    color: COLORS.mutedText,
     textAlign: 'center',
+    writingDirection: 'rtl',
+    width: '100%',
+    marginTop: 2,
   },
-  warningContainer: {
-    backgroundColor: '#ffebee',
-    padding: 15,
-    borderRadius: 10,
-    marginVertical: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f44336',
+  footer: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 8,
   },
   warningText: {
-    color: '#d32f2f',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    flex: 1,
+    color: COLORS.mutedText,
+    fontSize: 12,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  saveButton: {
-    backgroundColor: '#27ae60',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    margin: 20,
-    borderRadius: 25,
+  startButton: {
+    minWidth: 190,
+    minHeight: 46,
+    backgroundColor: COLORS.emerald,
+    borderColor: '#34D399',
+    borderWidth: 1,
+    borderRadius: 13,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
   disabledButton: {
-    backgroundColor: '#bdc3c7',
+    backgroundColor: COLORS.mutedControl,
+    borderColor: COLORS.neutralLine,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+  startButtonText: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: '800',
+    writingDirection: 'rtl',
   },
+});
+
+const desktopStyles = StyleSheet.create({
+  screen: { width: '100%', maxWidth: 1320, alignSelf: 'center', paddingHorizontal: 28, paddingVertical: 20 },
+  playerPanel: { paddingHorizontal: 24, paddingVertical: 18 },
+  colorGrid: { width: '100%', maxWidth: 440, alignSelf: 'center' },
+  colorOption: { minHeight: 100 },
+  colorName: { fontSize: 14, marginTop: 6 },
 });

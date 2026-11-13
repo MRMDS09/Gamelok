@@ -1,7 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, BackHandler, Modal, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Defs, Line, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useAudioManager } from './AudioManager';
+import {
+  BoardEdge,
+  BoardMode,
+  CpuDifficulty,
+  getBoardEdges,
+  isPlayableBox,
+  OpponentMode,
+  StartingPlayerMode,
+} from './BoardModes';
+import { chooseCpuMove, getCpuMoveDelay } from './GameAI';
 import { COLORS } from './theme';
 
 // --- Interfaces (تعريف أنواع البيانات) ---
@@ -15,19 +25,22 @@ export interface Player {
 export interface GameState {
   players: Player[];
   currentPlayer: number;
-  horizontalLines: (number | false)[][]; // تخزن رقم اللاعب الذي رسم الخط أو false إذا لم يُرسم
-  verticalLines: (number | false)[][];     // تخزن رقم اللاعب الذي رسم الخط أو false إذا لم يُرسم
+  horizontalLines: LineState[][];
+  verticalLines: LineState[][];
   boxes: (number | null)[][]; // تخزن رقم اللاعب الذي أكمل المربع أو null
   gameOver: boolean;
+  endedEarly: boolean;
+  moveCount: number;
+  boxesCompletedLastMove: number;
 }
 
 // --- Constants (الثوابت) ---
-const BOX_COLUMNS = 7;
-const BOX_ROWS = 5;
-const TOTAL_BOXES = BOX_COLUMNS * BOX_ROWS;
 const BOARD_TOUCH_PADDING = 14;
+const RESULT_DELAY = 1000;
 
-type Edge = { type: 'h' | 'v'; row: number; col: number; key: string;
+type LineState = number | false | null;
+
+type Edge = BoardEdge & {
   startX: number; startY: number; endX: number; endY: number };
 type EdgeDistance = { edge: Edge; distance: number };
 type BoardHit = { edge: Edge | null; nearest: EdgeDistance | null;
@@ -60,24 +73,14 @@ const distancePointToSegment = (pointX: number, pointY: number,
     pointY - (startY + projection * dy));
 };
 
-const createBoardEdges = (cellSize: number, inset: number): Edge[] => {
-  const edges: Edge[] = [];
-  for (let row = 0; row <= BOX_ROWS; row++) {
-    for (let col = 0; col < BOX_COLUMNS; col++) {
-      edges.push({ type: 'h', row, col, key: `h-${row}-${col}`,
-        startX: inset + col * cellSize, startY: inset + row * cellSize,
-        endX: inset + (col + 1) * cellSize, endY: inset + row * cellSize });
-    }
-  }
-  for (let row = 0; row < BOX_ROWS; row++) {
-    for (let col = 0; col <= BOX_COLUMNS; col++) {
-      edges.push({ type: 'v', row, col, key: `v-${row}-${col}`,
-        startX: inset + col * cellSize, startY: inset + row * cellSize,
-        endX: inset + col * cellSize, endY: inset + (row + 1) * cellSize });
-    }
-  }
-  return edges;
-};
+const createBoardEdges = (mode: BoardMode, cellSize: number, inset: number): Edge[] =>
+  getBoardEdges(mode).map((edge) => ({
+    ...edge,
+    startX: inset + edge.col * cellSize,
+    startY: inset + edge.row * cellSize,
+    endX: inset + (edge.col + (edge.type === 'h' ? 1 : 0)) * cellSize,
+    endY: inset + (edge.row + (edge.type === 'v' ? 1 : 0)) * cellSize,
+  }));
 
 const findBoardEdge = (pointX: number, pointY: number, edges: Edge[], hitRadius: number): BoardHit => {
   let nearest: EdgeDistance | null = null;
@@ -105,12 +108,31 @@ const isEdgeSelected = (edge: Edge, horizontalLines: GameState['horizontalLines'
   ? horizontalLines[edge.row][edge.col] !== false
   : verticalLines[edge.row][edge.col] !== false;
 
+const isDrawnLine = (line: LineState): line is number => typeof line === 'number';
+
+const getStartingPlayerIndex = (mode: StartingPlayerMode): number => {
+  if (mode === 'player1') return 0;
+  if (mode === 'player2') return 1;
+  return Math.random() < 0.5 ? 0 : 1;
+};
+
+const CPU_DIFFICULTY_LABELS: Record<CpuDifficulty, string> = {
+  easy: 'سهل',
+  balanced: 'متوازن',
+  expert: 'خبير',
+};
+
 // --- The Main Game Component (المكون الرئيسي للعبة) ---
 interface GameProps {
   onBackToHome?: () => void;
   onOpenSettings?: () => void;
+  paused?: boolean;
   player1Color?: string;
   player2Color?: string;
+  boardMode: BoardMode;
+  opponentMode: OpponentMode;
+  cpuDifficulty: CpuDifficulty;
+  startingPlayer: StartingPlayerMode;
   onGameEnd?: (
     players: {id: number, name: string, score: number, color: string}[],
     endedEarly: boolean,
@@ -120,8 +142,13 @@ interface GameProps {
 export const Game: React.FC<GameProps> = ({ 
   onBackToHome, 
   onOpenSettings,
+  paused = false,
   player1Color = COLORS.playerRed,
   player2Color = COLORS.playerBlue,
+  boardMode,
+  opponentMode,
+  cpuDifficulty,
+  startingPlayer,
   onGameEnd
 }) => {
   const { playClickSound, playBoxCompleteSound, playGameOverSound } = useAudioManager();
@@ -129,157 +156,342 @@ export const Game: React.FC<GameProps> = ({
   const [layout, setLayout] = useState({ width: 0, height: 0 });
   const completedSquareGradients = useMemo(() => [player1Color, player2Color]
     .map(createCompletedSquareGradient), [player1Color, player2Color]);
-  const sidePanelWidth = Math.min(340, Math.max(228,
+  const sidePanelWidth = Math.min(340, Math.max(244,
     Math.min(284, layout.width * 0.36) + Math.max(0, windowWidth - 900) * 0.15,
   ));
-  const availableBoardWidth = Math.max(0, layout.width - 32 - 8 - sidePanelWidth - BOARD_TOUCH_PADDING * 2);
+  const compactControls = (layout.height || windowHeight) < 600;
+  const panelPadding = compactControls ? 12 : 22;
+  const layoutGap = compactControls ? 12 : 24;
+  const availableBoardWidth = Math.max(0, layout.width - 32 - layoutGap - sidePanelWidth - BOARD_TOUCH_PADDING * 2);
   const availableBoardHeight = Math.max(0, layout.height - 16 - BOARD_TOUCH_PADDING * 2);
   // Reserve enough room for the largest visible dot and edge before fitting square cells.
   const unconstrainedCellSize = Math.max(0, Math.floor(Math.min(
-    availableBoardWidth / BOX_COLUMNS,
-    availableBoardHeight / BOX_ROWS,
+    availableBoardWidth / boardMode.columns,
+    availableBoardHeight / boardMode.rows,
   )));
   const insetDotRadius = Math.max(4, Math.min(7, unconstrainedCellSize * 0.1));
   const insetEdgeThickness = Math.max(7, Math.min(13, unconstrainedCellSize * 0.16));
   const BOARD_INSET = Math.ceil(Math.max(insetDotRadius + 3, insetEdgeThickness / 2 + 3));
   const cellSize = Math.max(0, Math.floor(Math.min(
-    (availableBoardWidth - BOARD_INSET * 2) / BOX_COLUMNS,
-    (availableBoardHeight - BOARD_INSET * 2) / BOX_ROWS,
+    (availableBoardWidth - BOARD_INSET * 2) / boardMode.columns,
+    (availableBoardHeight - BOARD_INSET * 2) / boardMode.rows,
   )));
-  const boardWidth = cellSize * BOX_COLUMNS + BOARD_INSET * 2;
-  const boardHeight = cellSize * BOX_ROWS + BOARD_INSET * 2;
+  const boardWidth = cellSize * boardMode.columns + BOARD_INSET * 2;
+  const boardHeight = cellSize * boardMode.rows + BOARD_INSET * 2;
   const lineThickness = Math.max(7, Math.min(13, cellSize * 0.16));
   const dotRadius = Math.max(4, Math.min(7, cellSize * 0.1));
   const completedSquareBorderInset = Math.max(2, lineThickness * 0.45);
   const completedSquareBorderWidth = Math.max(2, lineThickness * 0.28);
   const EDGE_HIT_RADIUS = Math.min(30, Math.max(20, cellSize * 0.32));
-  const boardEdges = createBoardEdges(cellSize, BOARD_INSET);
+  const boardEdges = useMemo(
+    () => createBoardEdges(boardMode, cellSize, BOARD_INSET),
+    [BOARD_INSET, boardMode, cellSize],
+  );
   const controlHeight = layout.height || windowHeight;
-  const controlGap = Math.max(5, Math.min(14, controlHeight * 0.02));
-  const playerCardHeight = Math.max(64, Math.min(78, controlHeight * 0.17));
-  const turnBadgeHeight = Math.max(42, Math.min(58, controlHeight * 0.12));
+  const controlGap = compactControls ? 8 : 16;
+  const playerCardHeight = compactControls ? 80 : 108;
+  const turnBadgeHeight = compactControls ? 44 : 60;
   const actionHeight = Math.max(44, Math.min(54, controlHeight * 0.12));
-  const compactControls = controlHeight < 410;
+
   
   // --- State Management (إدارة حالة اللعبة) ---
-  const createInitialState = (): GameState => ({
-    players: [
-      { id: 1, name: 'اللاعب الأول', score: 0, color: player1Color },
-      { id: 2, name: 'اللاعب الثاني', score: 0, color: player2Color }
-    ],
-    currentPlayer: 0,
-    horizontalLines: Array(BOX_ROWS + 1).fill(null).map(() => Array(BOX_COLUMNS).fill(false)),
-    verticalLines: Array(BOX_ROWS).fill(null).map(() => Array(BOX_COLUMNS + 1).fill(false)),
-    boxes: Array(BOX_ROWS).fill(null).map(() => Array(BOX_COLUMNS).fill(null)),
-    gameOver: false,
-  });
+  const createInitialState = useCallback((): GameState => {
+    const horizontalLines: LineState[][] = Array.from(
+      { length: boardMode.rows + 1 },
+      () => Array(boardMode.columns).fill(null),
+    );
+    const verticalLines: LineState[][] = Array.from(
+      { length: boardMode.rows },
+      () => Array(boardMode.columns + 1).fill(null),
+    );
+    getBoardEdges(boardMode).forEach((edge) => {
+      if (edge.type === 'h') horizontalLines[edge.row][edge.col] = false;
+      else verticalLines[edge.row][edge.col] = false;
+    });
 
-  const [gameState, setGameState] = useState<GameState>(createInitialState());
+    return {
+      players: [
+        { id: 1, name: 'اللاعب الأول', score: 0, color: player1Color },
+        {
+          id: 2,
+          name: opponentMode === 'cpu' ? 'الهاتف' : 'اللاعب الثاني',
+          score: 0,
+          color: player2Color,
+        },
+      ],
+      currentPlayer: getStartingPlayerIndex(startingPlayer),
+      horizontalLines,
+      verticalLines,
+      boxes: Array.from(
+        { length: boardMode.rows },
+        () => Array(boardMode.columns).fill(null),
+      ),
+      gameOver: false,
+      endedEarly: false,
+      moveCount: 0,
+      boxesCompletedLastMove: 0,
+    };
+  }, [boardMode, opponentMode, player1Color, player2Color, startingPlayer]);
 
-  // دالة لمعالجة اللمس على اللوحة
-  const handleBoardTouch = (event: any) => {
-    const { locationX, locationY } = event.nativeEvent;
-    const hit = findBoardEdge(locationX, locationY, boardEdges, EDGE_HIT_RADIUS);
-    const alreadySelected = hit.edge && isEdgeSelected(hit.edge,
-      gameState.horizontalLines, gameState.verticalLines);
-    if (hit.edge && !alreadySelected && !gameState.gameOver) {
-      handleLinePress(hit.edge.type, hit.edge.row, hit.edge.col);
+  const [gameState, setGameState] = useState<GameState>(() => createInitialState());
+  const [isCpuThinking, setIsCpuThinking] = useState(false);
+  const [leaveConfirmationOpen, setLeaveConfirmationOpen] = useState(false);
+  const gameStateRef = useRef(gameState);
+  const moveHandlerRef = useRef<(edge: BoardEdge) => void>(() => undefined);
+  const cpuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameSessionRef = useRef(0);
+  const pausedRef = useRef(paused);
+  const gameEndNotifiedRef = useRef(false);
+  const onGameEndRef = useRef(onGameEnd);
+  const playBoxCompleteSoundRef = useRef(playBoxCompleteSound);
+  const playGameOverSoundRef = useRef(playGameOverSound);
+
+  gameStateRef.current = gameState;
+  pausedRef.current = paused || leaveConfirmationOpen;
+  onGameEndRef.current = onGameEnd;
+  playBoxCompleteSoundRef.current = playBoxCompleteSound;
+  playGameOverSoundRef.current = playGameOverSound;
+
+  const cancelPendingTimers = useCallback(() => {
+    if (cpuTimerRef.current) {
+      clearTimeout(cpuTimerRef.current);
+      cpuTimerRef.current = null;
     }
-  };
+    if (resultTimerRef.current) {
+      clearTimeout(resultTimerRef.current);
+      resultTimerRef.current = null;
+    }
+  }, []);
 
   // --- Game Logic (منطق اللعبة) ---
-  const handleLinePress = (type: 'h' | 'v', row: number, col: number) => {
-    if (gameState.gameOver) return;
-    
-    // تشغيل صوت النقر
+  const handleLinePress = useCallback((type: 'h' | 'v', row: number, col: number) => {
+    const latestState = gameStateRef.current;
+    const line = type === 'h'
+      ? latestState.horizontalLines[row]?.[col]
+      : latestState.verticalLines[row]?.[col];
+    if (pausedRef.current || latestState.gameOver || line !== false) return;
+
     playClickSound();
+    setGameState((previous) => {
+      if (pausedRef.current || previous.gameOver) return previous;
+      const previousLine = type === 'h'
+        ? previous.horizontalLines[row]?.[col]
+        : previous.verticalLines[row]?.[col];
+      if (previousLine !== false) return previous;
 
-    setGameState(prev => {
-      // التأكد من أن الخط لم يتم رسمه من قبل
-      if ((type === 'h' && prev.horizontalLines[row][col] !== false) ||
-          (type === 'v' && prev.verticalLines[row][col] !== false)) {
-        return prev;
-      }
+      const newHorizontalLines = previous.horizontalLines.map((lineRow) => [...lineRow]);
+      const newVerticalLines = previous.verticalLines.map((lineRow) => [...lineRow]);
+      const newBoxes = previous.boxes.map((boxRow) => [...boxRow]);
+      const newPlayers = previous.players.map((player) => ({ ...player }));
 
-      // إنشاء نسخ جديدة من المصفوفات لضمان عدم تعديل الحالة مباشرة (Immutability)
-      const newHorizontalLines = prev.horizontalLines.map(r => [...r]);
-      const newVerticalLines = prev.verticalLines.map(r => [...r]);
-      const newBoxes = prev.boxes.map(r => [...r]);
-      const newPlayers = prev.players.map(p => ({ ...p }));
+      if (type === 'h') newHorizontalLines[row][col] = previous.currentPlayer;
+      else newVerticalLines[row][col] = previous.currentPlayer;
 
-      // عند رسم الخط، نخزن رقم اللاعب بدلاً من القيمة true
-      if (type === 'h') {
-        newHorizontalLines[row][col] = prev.currentPlayer;
-      } else {
-        newVerticalLines[row][col] = prev.currentPlayer;
-      }
-
-      // التحقق من إكمال المربعات
       let boxesCompleted = 0;
-      for (let r = 0; r < BOX_ROWS; r++) {
-        for (let c = 0; c < BOX_COLUMNS; c++) {
+      for (let boxRow = 0; boxRow < boardMode.rows; boxRow++) {
+        for (let boxColumn = 0; boxColumn < boardMode.columns; boxColumn++) {
+          if (!isPlayableBox(boardMode, boxRow, boxColumn)) continue;
           if (
-            newBoxes[r][c] === null && // إذا لم يكن المربع مملوكًا بالفعل
-            newHorizontalLines[r][c] !== false &&
-            newHorizontalLines[r + 1][c] !== false &&
-            newVerticalLines[r][c] !== false &&
-            newVerticalLines[r][c + 1] !== false
+            newBoxes[boxRow][boxColumn] === null
+            && isDrawnLine(newHorizontalLines[boxRow][boxColumn])
+            && isDrawnLine(newHorizontalLines[boxRow + 1][boxColumn])
+            && isDrawnLine(newVerticalLines[boxRow][boxColumn])
+            && isDrawnLine(newVerticalLines[boxRow][boxColumn + 1])
           ) {
-            newBoxes[r][c] = prev.currentPlayer;
+            newBoxes[boxRow][boxColumn] = previous.currentPlayer;
             boxesCompleted++;
           }
         }
       }
-      
-      let nextPlayer = prev.currentPlayer;
+
+      let nextPlayer = previous.currentPlayer;
       if (boxesCompleted > 0) {
-        // تحديث النقاط، ويبقى دور اللاعب الحالي
-        newPlayers[prev.currentPlayer].score += boxesCompleted;
-        // تشغيل صوت إكمال المربع
-        playBoxCompleteSound();
+        newPlayers[previous.currentPlayer].score += boxesCompleted;
       } else {
-        // انتقال الدور إلى اللاعب التالي
-        nextPlayer = (prev.currentPlayer + 1) % prev.players.length;
+        nextPlayer = (previous.currentPlayer + 1) % previous.players.length;
       }
 
-      // التحقق من نهاية اللعبة بعد احتساب كامل نقاط الحركة الحالية.
-      const completedBoxes = newPlayers[0].score + newPlayers[1].score;
-      const remainingBoxes = TOTAL_BOXES - completedBoxes;
+      const completedBoxes = newPlayers.reduce((total, player) => total + player.score, 0);
+      const remainingBoxes = boardMode.boxCount - completedBoxes;
       const scoreDifference = Math.abs(newPlayers[0].score - newPlayers[1].score);
-      const fullBoardComplete = completedBoxes === TOTAL_BOXES;
+      const fullBoardComplete = completedBoxes === boardMode.boxCount;
       const endedEarly = boxesCompleted > 0
         && !fullBoardComplete
         && scoreDifference > remainingBoxes;
-      const gameOver = fullBoardComplete || endedEarly;
-
-      // إذا انتهت اللعبة، استدعاء دالة onGameEnd
-      if (gameOver && onGameEnd) {
-        // تشغيل صوت نهاية اللعبة
-        playGameOverSound();
-        setTimeout(() => {
-          onGameEnd(newPlayers, endedEarly);
-        }, endedEarly ? 0 : 1000); // الحسم المبكر فوري، والنهاية العادية تحتفظ بالتأخير الحالي.
-      }
 
       return {
-        ...prev,
+        ...previous,
         players: newPlayers,
         currentPlayer: nextPlayer,
         horizontalLines: newHorizontalLines,
         verticalLines: newVerticalLines,
         boxes: newBoxes,
-        gameOver: gameOver,
+        gameOver: fullBoardComplete || endedEarly,
+        endedEarly,
+        moveCount: previous.moveCount + 1,
+        boxesCompletedLastMove: boxesCompleted,
       };
     });
+  }, [boardMode, playClickSound]);
+
+  moveHandlerRef.current = (edge) => handleLinePress(edge.type, edge.row, edge.col);
+
+  const humanInputLocked = paused || leaveConfirmationOpen || gameState.gameOver
+    || (opponentMode === 'cpu' && gameState.currentPlayer === 1)
+    || isCpuThinking;
+
+  // دالة لمعالجة اللمس على اللوحة
+  const handleBoardTouch = (event: any) => {
+    if (pausedRef.current || humanInputLocked) return;
+    const { locationX, locationY } = event.nativeEvent;
+    const hit = findBoardEdge(locationX, locationY, boardEdges, EDGE_HIT_RADIUS);
+    const alreadySelected = hit.edge && isEdgeSelected(
+      hit.edge,
+      gameState.horizontalLines,
+      gameState.verticalLines,
+    );
+    if (hit.edge && !alreadySelected) {
+      handleLinePress(hit.edge.type, hit.edge.row, hit.edge.col);
+    }
   };
 
+  useEffect(() => {
+    if (gameState.boxesCompletedLastMove > 0) {
+      playBoxCompleteSoundRef.current();
+    }
+  }, [gameState.boxesCompletedLastMove, gameState.moveCount]);
+
+  useEffect(() => {
+    if (!gameState.gameOver || gameEndNotifiedRef.current) return;
+    gameEndNotifiedRef.current = true;
+    playGameOverSoundRef.current();
+    const session = gameSessionRef.current;
+    const finalPlayers = gameStateRef.current.players.map((player) => ({ ...player }));
+    const endedEarly = gameStateRef.current.endedEarly;
+    resultTimerRef.current = setTimeout(() => {
+      if (gameSessionRef.current !== session) return;
+      onGameEndRef.current?.(finalPlayers, endedEarly);
+    }, RESULT_DELAY);
+  }, [gameState.gameOver]);
+
+  useEffect(() => {
+    if (
+      paused || leaveConfirmationOpen
+      || opponentMode !== 'cpu'
+      || gameState.gameOver
+      || gameState.currentPlayer !== 1
+    ) {
+      setIsCpuThinking(false);
+      return;
+    }
+
+    setIsCpuThinking(true);
+    let active = true;
+    const session = gameSessionRef.current;
+    const delay = getCpuMoveDelay(
+      cpuDifficulty,
+      gameState.boxesCompletedLastMove > 0,
+    );
+    cpuTimerRef.current = setTimeout(() => {
+      if (!active || pausedRef.current || gameSessionRef.current !== session) return;
+      cpuTimerRef.current = null;
+      const latestState = gameStateRef.current;
+      if (latestState.gameOver || latestState.currentPlayer !== 1) return;
+      const edge = chooseCpuMove(boardMode, latestState, cpuDifficulty);
+      if (edge) {
+        moveHandlerRef.current(edge);
+      } else {
+        setGameState((previous) => previous.gameOver ? previous : {
+          ...previous,
+          gameOver: true,
+          endedEarly: false,
+        });
+      }
+      setIsCpuThinking(false);
+    }, delay);
+
+    return () => {
+      active = false;
+      if (cpuTimerRef.current) {
+        clearTimeout(cpuTimerRef.current);
+        cpuTimerRef.current = null;
+      }
+    };
+  }, [
+    boardMode,
+    cpuDifficulty,
+    gameState.boxesCompletedLastMove,
+    gameState.currentPlayer,
+    gameState.gameOver,
+    gameState.moveCount,
+    opponentMode,
+    paused,
+    leaveConfirmationOpen,
+  ]);
+
+  useEffect(() => () => {
+    gameSessionRef.current++;
+    cancelPendingTimers();
+  }, [cancelPendingTimers]);
+
   const resetGame = () => {
+    if (pausedRef.current) return;
+    gameSessionRef.current++;
+    cancelPendingTimers();
+    gameEndNotifiedRef.current = false;
+    setIsCpuThinking(false);
     setGameState(createInitialState());
   };
 
+  const leaveGame = useCallback(() => {
+    pausedRef.current = true;
+    gameSessionRef.current++;
+    cancelPendingTimers();
+    onBackToHome?.();
+  }, [cancelPendingTimers, onBackToHome]);
+
+  const handleBackToHome = useCallback(() => {
+    if (pausedRef.current || !onBackToHome) return;
+    const latestState = gameStateRef.current;
+    if (latestState.moveCount === 0 || latestState.gameOver) {
+      leaveGame();
+      return;
+    }
+    // Block input immediately, including an already queued computer move.
+    pausedRef.current = true;
+    cancelPendingTimers();
+    setLeaveConfirmationOpen(true);
+  }, [cancelPendingTimers, leaveGame, onBackToHome]);
+
+  const cancelLeaving = () => {
+    pausedRef.current = paused;
+    setLeaveConfirmationOpen(false);
+  };
+
+  useEffect(() => {
+    if (!onBackToHome || paused) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBackToHome();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [handleBackToHome, onBackToHome, paused]);
+
+  const handleOpenSettings = () => {
+    if (pausedRef.current || gameStateRef.current.gameOver || !onOpenSettings) return;
+    // Block queued input and CPU callbacks before the parent's next render.
+    pausedRef.current = true;
+    if (cpuTimerRef.current) {
+      clearTimeout(cpuTimerRef.current);
+      cpuTimerRef.current = null;
+    }
+    onOpenSettings();
+  };
+
   const requestResetGame = () => {
-    const hasProgress = gameState.horizontalLines.some((row) => row.some((edge) => edge !== false))
-      || gameState.verticalLines.some((row) => row.some((edge) => edge !== false));
+    const hasProgress = gameState.horizontalLines.some((row) => row.some(isDrawnLine))
+      || gameState.verticalLines.some((row) => row.some(isDrawnLine));
 
     if (!hasProgress || gameState.gameOver) {
       resetGame();
@@ -298,15 +510,21 @@ export const Game: React.FC<GameProps> = ({
 
   // --- Rendering Logic (منطق العرض) ---
   const dots: { id: string; cx: number; cy: number }[] = [];
-  for (let row = 0; row <= BOX_ROWS; row++) {
-    for (let col = 0; col <= BOX_COLUMNS; col++) {
-      dots.push({
-        id: `d-${row}-${col}`,
+  const dotMap = new Map<string, { id: string; cx: number; cy: number }>();
+  boardEdges.forEach((edge) => {
+    const points = edge.type === 'h'
+      ? [[edge.row, edge.col], [edge.row, edge.col + 1]]
+      : [[edge.row, edge.col], [edge.row + 1, edge.col]];
+    points.forEach(([row, col]) => {
+      const id = `d-${row}-${col}`;
+      dotMap.set(id, {
+        id,
         cx: BOARD_INSET + col * cellSize,
         cy: BOARD_INSET + row * cellSize,
       });
-    }
-  }
+    });
+  });
+  dots.push(...dotMap.values());
   const completedSquares: { id: string; row: number; col: number; playerIndex: number }[] = [];
   gameState.boxes.forEach((row, rowIndex) => row.forEach((playerIndex, colIndex) => {
     if (playerIndex !== null) {
@@ -320,13 +538,13 @@ export const Game: React.FC<GameProps> = ({
   }));
   const selectedEdges: { id: string; x: number; y: number; horizontal: boolean; color: string }[] = [];
   gameState.horizontalLines.forEach((row, r) => row.forEach((drawn, c) => {
-    if (drawn !== false) selectedEdges.push({
+    if (isDrawnLine(drawn)) selectedEdges.push({
       id: `h-${r}-${c}`, x: BOARD_INSET + c * cellSize,
       y: BOARD_INSET + r * cellSize, horizontal: true, color: gameState.players[drawn].color,
     });
   }));
   gameState.verticalLines.forEach((row, r) => row.forEach((drawn, c) => {
-    if (drawn !== false) selectedEdges.push({
+    if (isDrawnLine(drawn)) selectedEdges.push({
       id: `v-${r}-${c}`, x: BOARD_INSET + c * cellSize,
       y: BOARD_INSET + r * cellSize, horizontal: false, color: gameState.players[drawn].color,
     });
@@ -345,16 +563,20 @@ export const Game: React.FC<GameProps> = ({
       opacity={glow ? 0.18 : 1}
     />
   );
+  const isCpuTurn = opponentMode === 'cpu' && gameState.currentPlayer === 1;
+  const boardSummary = opponentMode === 'cpu'
+    ? `${boardMode.name} · ${boardMode.boxCount} مربع · ${CPU_DIFFICULTY_LABELS[cpuDifficulty]}`
+    : `${boardMode.name} · ${boardMode.boxCount} مربع`;
 
   return (
     <SafeAreaView style={[styles.safeArea, { paddingRight: Math.max(28, Math.min(32, windowWidth * 0.035)) }]}>
-    <View style={styles.screen} onLayout={(event) => {
+    <View style={[styles.screen, { gap: layoutGap }]} onLayout={(event) => {
       const { width, height } = event.nativeEvent.layout;
       setLayout((previous) => previous.width === width && previous.height === height
         ? previous : { width, height });
     }}>
       {/* لوحة اللعب */}
-      <View style={styles.boardArea}>
+      <View style={[styles.boardArea, { width: boardWidth + BOARD_TOUCH_PADDING * 2 }]}>
       {cellSize > 0 && (
         <View style={[styles.boardContainer, {
           width: boardWidth + BOARD_TOUCH_PADDING * 2,
@@ -469,6 +691,7 @@ export const Game: React.FC<GameProps> = ({
         </Svg>
           <Pressable
             onPressIn={handleBoardTouch}
+            disabled={humanInputLocked}
             style={[styles.boardTouchOverlay, { width: boardWidth, height: boardHeight }]}
           />
           </View>
@@ -476,29 +699,8 @@ export const Game: React.FC<GameProps> = ({
       )}
       </View>
 
-      <View style={[styles.sidePanel, { width: sidePanelWidth, gap: controlGap }]}>
-        <View style={styles.topActions}>
-          {onOpenSettings && (
-            <TouchableOpacity
-              style={styles.topActionButton}
-              onPress={onOpenSettings}
-              accessibilityRole="button"
-              accessibilityLabel="فتح الإعدادات"
-            >
-              <Text style={styles.topActionText}>⚙ الإعدادات</Text>
-            </TouchableOpacity>
-          )}
-          {onBackToHome && (
-            <TouchableOpacity
-              style={styles.topActionButton}
-              onPress={onBackToHome}
-              accessibilityRole="button"
-              accessibilityLabel="العودة إلى الرئيسية"
-            >
-              <Text style={styles.topActionText}>⌂ الرئيسية</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+      <View style={[styles.sidePanel, { width: sidePanelWidth, gap: controlGap, padding: panelPadding }]}>
+        <Text style={[styles.boardSummary, compactControls && styles.compactSummary]} numberOfLines={2}>{boardSummary}</Text>
         <View style={[
           styles.turnBadge,
           {
@@ -512,7 +714,11 @@ export const Game: React.FC<GameProps> = ({
             { backgroundColor: gameState.players[gameState.currentPlayer].color },
           ]} />
           <Text style={[styles.turnText, compactControls && styles.compactTurnText]} numberOfLines={1}>
-            دور {gameState.players[gameState.currentPlayer].name}
+            {paused
+              ? 'المباراة متوقفة'
+              : isCpuTurn && !gameState.gameOver
+              ? 'الهاتف يفكر...'
+              : `دور ${gameState.players[gameState.currentPlayer].name}`}
           </Text>
         </View>
         <View style={[styles.playersInfo, { gap: controlGap }]}>
@@ -521,14 +727,15 @@ export const Game: React.FC<GameProps> = ({
               styles.playerCard,
               {
                 minHeight: playerCardHeight,
-                borderColor: player.color,
+                borderColor: gameState.currentPlayer === index ? player.color : '#334155',
+                backgroundColor: gameState.currentPlayer === index ? player.color + '18' : COLORS.board,
               },
               gameState.currentPlayer === index && styles.currentPlayer,
             ]}>
               <View style={styles.playerIdentity}>
                 <View style={[styles.playerColorIndicator, { backgroundColor: player.color }]} />
-                <Text style={[styles.playerName, compactControls && styles.compactPlayerName]} numberOfLines={1}>
-                  اللاعب {index + 1}
+                <Text style={[styles.playerName, compactControls && styles.compactPlayerName]} numberOfLines={2}>
+                  {player.name}
                 </Text>
               </View>
               <Text style={[styles.playerScore, compactControls && styles.compactScore]}>{player.score}</Text>
@@ -536,16 +743,86 @@ export const Game: React.FC<GameProps> = ({
           ))}
         </View>
         <TouchableOpacity style={[styles.resetButton, { minHeight: actionHeight }]} onPress={requestResetGame}>
-          <Text style={[styles.resetButtonText, compactControls && styles.compactActionText]}>لعبة جديدة</Text>
+          <Text style={[styles.resetButtonText, compactControls && styles.compactActionText]}>إعادة المباراة</Text>
         </TouchableOpacity>
+        <View style={styles.topActions}>
+          {onBackToHome && (
+            <TouchableOpacity
+              style={styles.topActionButton}
+              onPress={handleBackToHome}
+              accessibilityRole="button"
+              accessibilityLabel="العودة إلى الرئيسية"
+            >
+              <Text style={styles.topActionText}>⌂ الرئيسية</Text>
+            </TouchableOpacity>
+          )}
+          {onOpenSettings && (
+            <TouchableOpacity
+              style={styles.topActionButton}
+              onPress={handleOpenSettings}
+              disabled={paused || gameState.gameOver}
+              accessibilityRole="button"
+              accessibilityLabel="فتح الإعدادات"
+            >
+              <Text style={styles.topActionText}>⚙ الإعدادات</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
+    <Modal
+      visible={leaveConfirmationOpen}
+      transparent
+      animationType="fade"
+      supportedOrientations={['landscape-left', 'landscape-right']}
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={cancelLeaving}
+    >
+      <View style={styles.confirmationBackdrop}>
+        <View style={styles.confirmationCard} accessibilityViewIsModal>
+          <Text style={styles.confirmationTitle} accessibilityRole="header">مغادرة المباراة؟</Text>
+          <Text style={styles.confirmationMessage}>المباراة ما زالت جارية. إذا غادرت الآن، ستفقد تقدم هذه المباراة.</Text>
+          <View style={styles.confirmationActions}>
+            <TouchableOpacity accessibilityRole="button" style={[styles.confirmationButton, styles.stayButton]} onPress={cancelLeaving}>
+              <Text style={styles.resetButtonText}>متابعة اللعب</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" style={[styles.confirmationButton, styles.leaveButton]} onPress={leaveGame}>
+              <Text style={styles.resetButtonText}>مغادرة المباراة</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
     </SafeAreaView>
   );
 };
 
 // --- Styles (الأنماط) ---
 const styles = StyleSheet.create({
+  confirmationBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(3, 8, 22, 0.85)',
+    padding: 20,
+  },
+  confirmationCard: {
+    width: '100%',
+    maxWidth: 440,
+    padding: 22,
+    gap: 16,
+    borderRadius: 16,
+    backgroundColor: COLORS.panel,
+    borderWidth: 1,
+    borderColor: COLORS.gold,
+  },
+  confirmationTitle: { color: COLORS.gold, fontSize: 22, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
+  confirmationMessage: { color: COLORS.text, fontSize: 16, lineHeight: 25, textAlign: 'right', writingDirection: 'rtl' },
+  confirmationActions: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 },
+  confirmationButton: { flexGrow: 1, minHeight: 48, paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  stayButton: { backgroundColor: COLORS.emerald },
+  leaveButton: { backgroundColor: COLORS.danger },
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -561,19 +838,22 @@ const styles = StyleSheet.create({
     direction: 'ltr',
   },
   boardArea: {
-    flex: 1,
-    alignSelf: 'stretch',
+    flexShrink: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sidePanel: {
-    alignSelf: 'stretch',
-    justifyContent: 'center',
+    flexShrink: 0,
+    alignSelf: 'center',
     backgroundColor: COLORS.panel,
     borderColor: '#2B354D',
     borderWidth: 1,
     borderRadius: 16,
-    padding: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 5,
   },
   topActions: {
     flexDirection: 'row-reverse',
@@ -581,7 +861,7 @@ const styles = StyleSheet.create({
   },
   topActionButton: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.board,
@@ -597,8 +877,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+  compactSummary: { fontSize: 13 },
+  boardSummary: {
+    color: COLORS.gold,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
   playersInfo: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
   },
   playerCard: {
     flex: 1,
@@ -628,20 +917,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   playerName: {
-    fontSize: 13,
+    flexShrink: 1,
+    fontSize: 15,
     fontWeight: '700',
     textAlign: 'center',
-    color: COLORS.mutedText,
+    color: COLORS.text,
     writingDirection: 'rtl',
   },
   playerScore: {
-    fontSize: 28,
+    fontSize: 40,
     fontWeight: '800',
     textAlign: 'center',
     color: COLORS.text,
   },
-  compactScore: { fontSize: 24 },
-  compactPlayerName: { fontSize: 12 },
+  compactScore: { fontSize: 28 },
+  compactPlayerName: { fontSize: 13 },
   turnBadge: {
     flexDirection: 'row-reverse',
     borderRadius: 12,
@@ -660,13 +950,13 @@ const styles = StyleSheet.create({
   },
   turnText: {
     flexShrink: 1,
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
     color: COLORS.text,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  compactTurnText: { fontSize: 14 },
+  compactTurnText: { fontSize: 15 },
   boardContainer: {
     backgroundColor: COLORS.board,
     borderRadius: 14,

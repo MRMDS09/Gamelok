@@ -78,9 +78,9 @@ const reportPlaybackError = (soundName: string, error: unknown) => {
   console.warn(`تعذر تشغيل صوت ${soundName}. قد يتطلب الويب تفاعلاً من المستخدم أولاً.`, error);
 };
 
-export const AudioManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<GameSettings>(DEFAULT_SETTINGS);
-  const settingsRef = useRef<GameSettings>(DEFAULT_SETTINGS);
+export const AudioManagerProvider: React.FC<{ children: React.ReactNode; initialSettings?: GameSettings }> = ({ children, initialSettings = DEFAULT_SETTINGS }) => {
+  const [settings, setSettings] = useState<GameSettings>(initialSettings);
+  const settingsRef = useRef<GameSettings>(initialSettings);
   const [appState, setAppState] = useState(AppState.currentState ?? 'active');
   const backgroundPlayer = useAudioPlayer(require('../assets/game-music-gemini-2026-09-15.mp3'));
   const clickPlayer = useAudioPlayer(require('../assets/line-click.wav'));

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { COLORS } from './theme';
 
 interface ColorSelectionScreenProps {
   onBack: () => void;
   onSaveColors: (player1Color: string, player2Color: string) => void;
+  onColorsChange?: (player1Color: string, player2Color: string) => void;
   initialPlayer1Color?: string;
   initialPlayer2Color?: string;
+  player2Label?: string;
 }
 
 const AVAILABLE_COLORS = [
@@ -21,14 +23,18 @@ const AVAILABLE_COLORS = [
 export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
   onBack,
   onSaveColors,
+  onColorsChange,
   initialPlayer1Color = COLORS.playerRed,
   initialPlayer2Color = COLORS.playerBlue,
+  player2Label = 'اللاعب 2',
 }) => {
+  const { width, height } = useWindowDimensions();
+  const desktop = width >= 1024 && height >= 600;
   const [player1Color, setPlayer1Color] = useState(initialPlayer1Color);
   const [player2Color, setPlayer2Color] = useState(initialPlayer2Color);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
   const sameColor = player1Color === player2Color;
-  const swatchSize = Math.max(20, Math.min(38,
+  const swatchSize = Math.max(20, Math.min(desktop ? 56 : 38,
     Math.floor((layout.width - 96) / 8) - 12,
     Math.floor((layout.height - 130) / 3) - 16,
   ));
@@ -39,7 +45,7 @@ export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
     unavailableColor: string,
     onSelect: (color: string) => void,
   ) => (
-    <View style={styles.playerPanel}>
+    <View style={[styles.playerPanel, desktop && desktopStyles.playerPanel]}>
       <View style={styles.playerHeading}>
         <View style={[styles.playerColorIndicator, { backgroundColor: selectedColor }]} />
         <View style={styles.playerHeadingText}>
@@ -48,14 +54,14 @@ export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
         </View>
       </View>
 
-      <View style={styles.colorGrid}>
+      <View style={[styles.colorGrid, desktop && desktopStyles.colorGrid]}>
         {AVAILABLE_COLORS.map((color) => {
           const isSelected = selectedColor === color.value;
           const isUnavailable = unavailableColor === color.value && !isSelected;
           return (
             <TouchableOpacity
               key={color.value}
-              style={[styles.colorOption, isUnavailable && styles.unavailableOption]}
+              style={[styles.colorOption, desktop && desktopStyles.colorOption, isUnavailable && styles.unavailableOption]}
               onPress={() => onSelect(color.value)}
               disabled={isUnavailable}
               activeOpacity={0.75}
@@ -75,7 +81,7 @@ export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
                   isSelected && styles.selectedSwatch,
                 ]}
               />
-              <Text style={styles.colorName} numberOfLines={1} adjustsFontSizeToFit>
+              <Text style={[styles.colorName, desktop && desktopStyles.colorName]} numberOfLines={1} adjustsFontSizeToFit>
                 {color.name}
               </Text>
             </TouchableOpacity>
@@ -88,7 +94,7 @@ export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
   return (
     <SafeAreaView style={styles.container}>
       <View
-        style={styles.screen}
+        style={[styles.screen, desktop && desktopStyles.screen]}
         onLayout={(event) => {
           const { width, height } = event.nativeEvent.layout;
           setLayout((previous) => previous.width === width && previous.height === height
@@ -113,13 +119,19 @@ export const ColorSelectionScreen: React.FC<ColorSelectionScreenProps> = ({
         </View>
 
         <View style={styles.panels}>
-          {renderPlayerPanel('اللاعب 1', player1Color, player2Color, setPlayer1Color)}
-          {renderPlayerPanel('اللاعب 2', player2Color, player1Color, setPlayer2Color)}
+          {renderPlayerPanel('اللاعب 1', player1Color, player2Color, (color) => {
+            setPlayer1Color(color);
+            onColorsChange?.(color, player2Color);
+          })}
+          {renderPlayerPanel(player2Label, player2Color, player1Color, (color) => {
+            setPlayer2Color(color);
+            onColorsChange?.(player1Color, color);
+          })}
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.warningText} numberOfLines={1}>
-            {sameColor ? 'اختر لونين مختلفين للمتابعة' : 'الألوان المختارة ستظهر على الحواف والمربعات'}
+            {sameColor ? 'اختر لونين مختلفين للمتابعة' : 'تُحفظ الألوان تلقائياً على هذا الجهاز'}
           </Text>
           <TouchableOpacity
             style={[styles.startButton, sameColor && styles.disabledButton]}
@@ -307,4 +319,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     writingDirection: 'rtl',
   },
+});
+
+const desktopStyles = StyleSheet.create({
+  screen: { width: '100%', maxWidth: 1320, alignSelf: 'center', paddingHorizontal: 28, paddingVertical: 20 },
+  playerPanel: { paddingHorizontal: 24, paddingVertical: 18 },
+  colorGrid: { width: '100%', maxWidth: 440, alignSelf: 'center' },
+  colorOption: { minHeight: 100 },
+  colorName: { fontSize: 14, marginTop: 6 },
 });

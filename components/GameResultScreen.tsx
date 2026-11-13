@@ -1,5 +1,6 @@
 import React from 'react';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BoardMode } from './BoardModes';
 import { COLORS } from './theme';
 
 interface GameResultScreenProps {
@@ -9,16 +10,20 @@ interface GameResultScreenProps {
     score: number;
     color: string;
   }[];
+  boardMode: BoardMode;
   endedEarly?: boolean;
   onPlayAgain: () => void;
+  onChooseAnotherBoard: () => void;
   onBackToHome: () => void;
   onOpenSettings?: () => void;
 }
 
 export const GameResultScreen: React.FC<GameResultScreenProps> = ({
   players,
+  boardMode,
   endedEarly = false,
   onPlayAgain,
+  onChooseAnotherBoard,
   onBackToHome,
   onOpenSettings,
 }) => {
@@ -64,12 +69,13 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
         <Text style={styles.resultText}>
           {result.type === 'winner' ? `الفائز: ${result.winner.name}` : 'تعادل اللاعبان'}
         </Text>
+        <Text style={styles.modeText}>نمط الشبكة: {boardMode.name}</Text>
         {endedEarly && (
-          <Text style={styles.earlyFinishText}>حُسمت المباراة مبكراً</Text>
+          <Text style={styles.earlyFinishText}>حُسمت المباراة مبكراً لأن التعادل لم يعد ممكناً</Text>
         )}
 
         <View style={styles.scoreCards}>
-          {players.map((player, index) => {
+          {players.map((player) => {
             const isWinner = result.type === 'winner' && result.winner.id === player.id;
             return (
               <View
@@ -82,7 +88,7 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
               >
                 <View style={styles.playerLabelRow}>
                   <View style={[styles.colorIndicator, { backgroundColor: player.color }]} />
-                  <Text style={styles.playerName}>اللاعب {index + 1}</Text>
+                  <Text style={styles.playerName}>{player.name}</Text>
                 </View>
                 <Text style={styles.score}>{player.score}</Text>
                 <Text style={styles.scoreLabel}>مربع</Text>
@@ -92,12 +98,15 @@ export const GameResultScreen: React.FC<GameResultScreenProps> = ({
         </View>
 
         <Text style={styles.totalScore}>
-          مجموع المربعات: {players.reduce((sum, player) => sum + player.score, 0)}
+          مجموع المربعات في الشبكة: {boardMode.boxCount}
         </Text>
 
         <View style={styles.actions}>
           <TouchableOpacity style={[styles.actionButton, styles.playAgainButton]} onPress={onPlayAgain} activeOpacity={0.82}>
-            <Text style={styles.actionButtonText}>لعبة جديدة</Text>
+            <Text style={styles.actionButtonText}>إعادة اللعب</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, styles.boardButton]} onPress={onChooseAnotherBoard} activeOpacity={0.82}>
+            <Text style={styles.actionButtonText}>شبكة أخرى</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionButton, styles.homeButton]} onPress={onBackToHome} activeOpacity={0.82}>
             <Text style={styles.actionButtonText}>الرئيسية</Text>
@@ -180,6 +189,14 @@ const styles = StyleSheet.create({
     marginTop: -2,
     marginBottom: 6,
   },
+  modeText: {
+    color: COLORS.mutedText,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginBottom: 4,
+  },
   scoreCards: {
     width: '100%',
     flexDirection: 'row',
@@ -257,6 +274,10 @@ const styles = StyleSheet.create({
   homeButton: {
     backgroundColor: COLORS.board,
     borderColor: COLORS.gold,
+  },
+  boardButton: {
+    backgroundColor: COLORS.mutedControl,
+    borderColor: COLORS.neutralLine,
   },
   actionButtonText: {
     color: COLORS.text,

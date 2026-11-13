@@ -1,11 +1,11 @@
 import React, { useRef, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { COLORS } from './theme';
 
 interface SettingsScreenProps {
+  modal?: boolean;
   onBack: () => void;
   onSaveSettings: (settings: GameSettings) => void;
-  onPreviewSettings: (settings: GameSettings) => void;
   onPreviewClickSound: (volume: number) => void;
   initialSettings?: GameSettings;
 }
@@ -50,6 +50,7 @@ const SteppedVolumeControl: React.FC<{
   testID: string;
   source: 'music' | 'click';
 }> = ({ value, onValueChange, onValueComplete, testID, source }) => {
+  const { width } = useWindowDimensions();
   const stepIndex = Math.max(0, Math.min(10, Math.round(clampVolume(value) * 10)));
 
   const handleSelectStep = (index: number) => {
@@ -63,7 +64,7 @@ const SteppedVolumeControl: React.FC<{
 
   return (
     <View
-      style={styles.steppedVolumeControl}
+      style={[styles.steppedVolumeControl, width < 600 && styles.compactVolumeControl]}
       testID={testID}
       nativeID={testID}
     >
@@ -105,38 +106,22 @@ const SteppedVolumeControl: React.FC<{
 };
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
+  modal = false,
   onBack,
   onSaveSettings,
-  onPreviewSettings,
   onPreviewClickSound,
   initialSettings = DEFAULT_SETTINGS,
 }) => {
-  const savedSettingsRef = useRef(normalizeSettings(initialSettings));
-  const [settings, setSettings] = useState<GameSettings>(savedSettingsRef.current);
+  const { width } = useWindowDimensions();
+  const compact = width < 600;
+  const [settings, setSettings] = useState<GameSettings>(() => normalizeSettings(initialSettings));
   const settingsRef = useRef(settings);
-
-  const handleSave = () => {
-    if (__DEV__) {
-      console.log(`[AUDIO APPLY] music=${settingsRef.current.backgroundMusicVolume.toFixed(2)} click=${settingsRef.current.clickSoundVolume.toFixed(2)} action=save`);
-    }
-    onSaveSettings(settingsRef.current);
-    onBack();
-  };
-
-  const handleBack = () => {
-    const savedSettings = savedSettingsRef.current;
-    if (__DEV__) {
-      console.log(`[AUDIO APPLY] music=${savedSettings.backgroundMusicVolume.toFixed(2)} click=${savedSettings.clickSoundVolume.toFixed(2)} action=restore`);
-    }
-    onPreviewSettings(savedSettings);
-    onBack();
-  };
 
   const applyDraftPatch = (patch: Partial<GameSettings>) => {
     const next = normalizeSettings({ ...settingsRef.current, ...patch });
     settingsRef.current = next;
     setSettings(next);
-    onPreviewSettings(next);
+    onSaveSettings(next);
   };
 
   const updateSetting = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => {
@@ -163,11 +148,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, modal && styles.modalContainer]}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
       <View style={styles.panel}>
         <Text style={styles.title}>الإعدادات</Text>
+        <Text style={{ color: COLORS.mutedText, textAlign: 'center' }}>تُحفظ التغييرات تلقائياً على هذا الجهاز</Text>
 
-        <View style={styles.audioRow}>
+        <View style={[styles.audioRow, compact && styles.compactAudioRow]}>
           <View style={styles.audioInfo}>
             <Text style={styles.audioIcon}>♪</Text>
             <View style={styles.audioCopy}>
@@ -195,7 +182,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           )}
         </View>
 
-        <View style={styles.audioRow}>
+        <View style={[styles.audioRow, compact && styles.compactAudioRow]}>
           <View style={styles.audioInfo}>
             <Text style={styles.audioIcon}>◉</Text>
             <View style={styles.audioCopy}>
@@ -241,17 +228,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={[styles.actionButton, styles.saveButton]} onPress={handleSave} activeOpacity={0.82}>
-            <Text style={styles.actionButtonText}>حفظ</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={[styles.actionButton, styles.resetButton]} onPress={handleReset} activeOpacity={0.82}>
             <Text style={styles.actionButtonText}>إعادة التعيين</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, styles.backButton]} onPress={handleBack} activeOpacity={0.82}>
+          <TouchableOpacity style={[styles.actionButton, styles.backButton]} onPress={onBack} activeOpacity={0.82}>
             <Text style={styles.actionButtonText}>رجوع</Text>
           </TouchableOpacity>
         </View>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -263,6 +248,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  modalContainer: {
+    backgroundColor: 'transparent',
+  },
+  scroll: {
+    width: '100%',
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactAudioRow: {
+    flexWrap: 'wrap',
     paddingVertical: 8,
   },
   panel: {
@@ -331,6 +332,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     minHeight: 58,
     alignItems: 'stretch',
+  },
+  compactVolumeControl: {
+    flexBasis: '100%',
   },
   volumePointsRow: {
     height: 44,

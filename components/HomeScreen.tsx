@@ -1,5 +1,5 @@
 import React from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { COLORS } from './theme';
 
 interface HomeScreenProps {
@@ -22,16 +22,19 @@ const GameEmblem: React.FC = () => (
   </View>
 );
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSettings }) => (
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSettings }) => {
+  const { width, height } = useWindowDimensions();
+  const desktop = width >= 1024 && height >= 600;
+  return (
   <SafeAreaView style={styles.container}>
     <View style={styles.content}>
       <GameEmblem />
-      <Text style={styles.title}>Gamelok</Text>
-      <Text style={styles.subtitle}>لعبة النقاط والمربعات</Text>
+      <Text style={[styles.title, desktop && desktopStyles.title]}>Gamelok</Text>
+      <Text style={[styles.subtitle, desktop && desktopStyles.subtitle]}>لعبة النقاط والمربعات</Text>
 
       <View style={styles.actions}>
         <TouchableOpacity
-          style={[styles.button, styles.primaryButton]}
+          style={[styles.button, desktop && desktopStyles.button, styles.primaryButton]}
           onPress={onStartGame}
           activeOpacity={0.82}
           accessibilityRole="button"
@@ -40,7 +43,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSetti
           <Text style={styles.primaryButtonText}>ابدأ اللعب</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.button, styles.secondaryButton]}
+          style={[styles.button, desktop && desktopStyles.button, styles.secondaryButton]}
           onPress={onOpenSettings}
           activeOpacity={0.82}
           accessibilityRole="button"
@@ -53,6 +56,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSetti
     <Text style={styles.version}>الإصدار {APP_VERSION}</Text>
   </SafeAreaView>
 );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -154,4 +158,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     writingDirection: 'rtl',
   },
+});
+
+const desktopStyles = StyleSheet.create({
+  title: { fontSize: 60, lineHeight: 70 },
+  subtitle: { fontSize: 22, lineHeight: 32 },
+  button: { minHeight: 64 },
 });

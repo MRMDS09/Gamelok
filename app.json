@@ -1,22 +1,29 @@
 {
-    "expo": {
-        "name": "Dots and Boxes Game",
-        "slug": "dots-and-boxes-game",
-        "version": "1.0.0",
-        "orientation": "portrait",
-        "userInterfaceStyle": "light",
-        "assetBundlePatterns": [
-            "**/*"
-        ],
-        "ios": {
-            "supportsTablet": true
-        },
-        "android": {
-            "package": "com.dotsandboxes.game"
-        },
-        "web": {
-            "bundler": "metro"
-        }
+  "expo": {
+    "name": "Dots and Boxes Game",
+    "slug": "dots-and-boxes-game",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "androidStatusBar": {
+      "hidden": true
     },
-    "name": "main"
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.dotsandboxes.game"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-audio",
+      "./plugins/withImmersiveAndroid"
+    ]
+  }
 }

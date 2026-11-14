@@ -1,109 +1,167 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { COLORS } from './theme';
 
 interface HomeScreenProps {
   onStartGame: () => void;
   onOpenSettings: () => void;
-  onOpenColorSelection: () => void;
-  onExitGame: () => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ 
-  onStartGame, 
-  onOpenSettings, 
-  onOpenColorSelection,
-  onExitGame
-}) => {
+const APP_VERSION = require('../app.json').expo.version as string;
+
+const GameEmblem: React.FC = () => (
+  <View style={styles.emblem} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={[styles.emblemLine, styles.emblemLineTop]} />
+    <View style={[styles.emblemLine, styles.emblemLineBottom]} />
+    <View style={[styles.emblemLine, styles.emblemLineLeft]} />
+    <View style={[styles.emblemLine, styles.emblemLineRight]} />
+    <View style={[styles.emblemDot, styles.dotTopLeft]} />
+    <View style={[styles.emblemDot, styles.dotTopRight]} />
+    <View style={[styles.emblemDot, styles.dotBottomLeft]} />
+    <View style={[styles.emblemDot, styles.dotBottomRight]} />
+  </View>
+);
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame, onOpenSettings }) => {
+  const { width, height } = useWindowDimensions();
+  const desktop = width >= 1024 && height >= 600;
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>لعبة النقاط والمربعات</Text>
-        <Text style={styles.subtitle}>Dots and Boxes</Text>
-      </View>
+  <SafeAreaView style={styles.container}>
+    <View style={styles.content}>
+      <GameEmblem />
+      <Text style={[styles.title, desktop && desktopStyles.title]}>Gamelok</Text>
+      <Text style={[styles.subtitle, desktop && desktopStyles.subtitle]}>لعبة النقاط والمربعات</Text>
 
-      <View style={styles.menuContainer}>
-        <TouchableOpacity style={[styles.menuButton, styles.startButton]} onPress={onStartGame}>
-          <Text style={styles.menuButtonText}>🎮 بدء اللعبة</Text>
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.button, desktop && desktopStyles.button, styles.primaryButton]}
+          onPress={onStartGame}
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel="ابدأ اللعب"
+        >
+          <Text style={styles.primaryButtonText}>ابدأ اللعب</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.menuButton, styles.settingsButton]} onPress={onOpenSettings}>
-          <Text style={styles.menuButtonText}>⚙️ الإعدادات</Text>
+        <TouchableOpacity
+          style={[styles.button, desktop && desktopStyles.button, styles.secondaryButton]}
+          onPress={onOpenSettings}
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel="الإعدادات"
+        >
+          <Text style={styles.secondaryButtonText}>الإعدادات</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.menuButton, styles.exitButton]} onPress={onExitGame}>
-          <Text style={styles.menuButtonText}>🚪 الخروج</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>استمتع باللعب! 🎯</Text>
       </View>
     </View>
-  );
+    <Text style={styles.version}>الإصدار {APP_VERSION}</Text>
+  </SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f7',
+    backgroundColor: COLORS.background,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
   },
-  header: {
+  content: {
+    width: '100%',
+    maxWidth: 660,
     alignItems: 'center',
-    marginBottom: 60,
   },
+  emblem: {
+    width: 76,
+    height: 48,
+    marginBottom: 6,
+  },
+  emblemLine: {
+    position: 'absolute',
+    backgroundColor: COLORS.neutralLine,
+    borderRadius: 2,
+  },
+  emblemLineTop: { left: 10, right: 10, top: 8, height: 3 },
+  emblemLineBottom: { left: 10, right: 10, bottom: 8, height: 3 },
+  emblemLineLeft: { left: 8, top: 10, bottom: 10, width: 3 },
+  emblemLineRight: { right: 8, top: 10, bottom: 10, width: 3 },
+  emblemDot: {
+    position: 'absolute',
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: COLORS.gold,
+    borderWidth: 2,
+    borderColor: COLORS.background,
+  },
+  dotTopLeft: { left: 4, top: 4 },
+  dotTopRight: { right: 4, top: 4 },
+  dotBottomLeft: { left: 4, bottom: 4 },
+  dotBottomRight: { right: 4, bottom: 4 },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    color: COLORS.gold,
+    fontSize: 44,
+    lineHeight: 50,
+    fontWeight: '800',
+    letterSpacing: 1.5,
     textAlign: 'center',
-    marginBottom: 10,
   },
   subtitle: {
+    color: COLORS.mutedText,
     fontSize: 18,
-    color: '#7f8c8d',
+    lineHeight: 26,
+    fontWeight: '600',
     textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: 2,
   },
-  menuContainer: {
+  actions: {
     width: '100%',
-    maxWidth: 300,
+    flexDirection: 'row-reverse',
+    gap: 12,
+    marginTop: 22,
   },
-  menuButton: {
-    paddingVertical: 18,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+  button: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 14,
     alignItems: 'center',
-    marginVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderWidth: 1,
   },
-  startButton: {
-    backgroundColor: '#27ae60',
+  primaryButton: {
+    backgroundColor: COLORS.emerald,
+    borderColor: '#34D399',
   },
-  settingsButton: {
-    backgroundColor: '#3498db',
+  secondaryButton: {
+    backgroundColor: COLORS.board,
+    borderColor: COLORS.gold,
   },
-  exitButton: {
-    backgroundColor: '#e74c3c',
+  primaryButtonText: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '800',
+    writingDirection: 'rtl',
   },
-  menuButtonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
+  secondaryButtonText: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '700',
+    writingDirection: 'rtl',
   },
-  footer: {
+  version: {
     position: 'absolute',
-    bottom: 40,
-    alignItems: 'center',
+    bottom: 10,
+    color: COLORS.mutedText,
+    fontSize: 11,
+    writingDirection: 'rtl',
   },
-  footerText: {
-    fontSize: 16,
-    color: '#95a5a6',
-    textAlign: 'center',
-  },
+});
+
+const desktopStyles = StyleSheet.create({
+  title: { fontSize: 60, lineHeight: 70 },
+  subtitle: { fontSize: 22, lineHeight: 32 },
+  button: { minHeight: 64 },
 });

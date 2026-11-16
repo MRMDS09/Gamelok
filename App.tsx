@@ -13,15 +13,17 @@ import {
   OpponentMode,
   StartingPlayerMode,
 } from './components/BoardModes';
-import { ColorSelectionScreen } from './components/ColorSelectionScreen';
+import { CharacterSelection } from './components/Characters';
+import { CharacterSelectionScreen } from './components/CharacterSelectionScreen';
 import { Game } from './components/Game';
 import { GameResultScreen } from './components/GameResultScreen';
 import { HomeScreen } from './components/HomeScreen';
+import type { Player } from './components/MatchPlayers';
 import { GameSettings, SettingsScreen } from './components/SettingsScreen';
 import { COLORS } from './components/theme';
 import { DEFAULT_PREFERENCES, loadPreferences, Preferences, savePreferences } from './utils/preferences';
 
-type Screen = 'home' | 'boardModeSelection' | 'game' | 'colorSelection' | 'settings' | 'gameResult';
+type Screen = 'home' | 'boardModeSelection' | 'game' | 'characterSelection' | 'settings' | 'gameResult';
 
 const clampVolume = (value: number) =>
   Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
@@ -41,7 +43,7 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
   const [opponentMode, setOpponentMode] = useState<OpponentMode>('local');
   const [cpuDifficulty, setCpuDifficulty] = useState<CpuDifficulty>(DEFAULT_CPU_DIFFICULTY);
   const [startingPlayer, setStartingPlayer] = useState<StartingPlayerMode>(DEFAULT_STARTING_PLAYER);
-  const [playerColors, setPlayerColors] = useState(initialPreferences.colors);
+  const [characters, setCharacters] = useState(initialPreferences.characters);
   const [saveError, setSaveError] = useState(false);
   const preferencesRef = useRef(initialPreferences);
   const writeVersion = useRef(0);
@@ -55,7 +57,7 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
       if (writeVersion.current === version) setSaveError(true);
     });
   };
-  const [gameResult, setGameResult] = useState<Array<{id: number, name: string, score: number, color: string}> | null>(null);
+  const [gameResult, setGameResult] = useState<Player[] | null>(null);
   const [gameEndedEarly, setGameEndedEarly] = useState(false);
   const [gameSettingsOpen, setGameSettingsOpen] = useState(false);
   const { previewClickSound, updateSettings } = useAudioManager();
@@ -76,7 +78,7 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
     setOpponentMode(selectedOpponentMode);
     setCpuDifficulty(selectedCpuDifficulty);
     setStartingPlayer(selectedStartingPlayer);
-    setCurrentScreen('colorSelection');
+    setCurrentScreen('characterSelection');
   };
 
   const handleOpenSettings = () => {
@@ -88,17 +90,16 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
     setCurrentScreen('home');
   };
 
-  const handleSaveColors = (player1Color: string, player2Color: string) => {
-    handleColorsChange(player1Color, player2Color);
+  const handleStartMatch = () => {
+    setGameResult(null);
     setGameEndedEarly(false);
     setGameSettingsOpen(false);
     setCurrentScreen('game');
   };
 
-  const handleColorsChange = (player1: string, player2: string) => {
-    const colors = { player1, player2 };
-    setPlayerColors(colors);
-    persistPreferences({ ...preferencesRef.current, colors });
+  const handleCharactersChange = (selection: CharacterSelection) => {
+    setCharacters(selection);
+    persistPreferences({ ...preferencesRef.current, characters: selection });
   };
 
   const handleSaveSettings = (settings: GameSettings) => {
@@ -113,7 +114,7 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
   };
 
   const handleGameEnd = (
-    players: Array<{id: number, name: string, score: number, color: string}>,
+    players: Player[],
     endedEarly: boolean,
   ) => {
     setGameResult(players);
@@ -136,6 +137,13 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
     setCurrentScreen('boardModeSelection');
   };
 
+  const handleChangeCharacters = () => {
+    setGameResult(null);
+    setGameEndedEarly(false);
+    setGameSettingsOpen(false);
+    setCurrentScreen('characterSelection');
+  };
+
   const renderCurrentScreen = () => {
     switch (currentScreen) {
       case 'home':
@@ -153,8 +161,8 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
               onBackToHome={handleBackToHome}
               onOpenSettings={() => setGameSettingsOpen(true)}
               paused={gameSettingsOpen}
-              player1Color={playerColors.player1}
-              player2Color={playerColors.player2}
+              player1CharacterId={characters.player1}
+              player2CharacterId={characters.player2}
               boardMode={getBoardMode(selectedBoardMode)}
               opponentMode={opponentMode}
               cpuDifficulty={cpuDifficulty}
@@ -176,14 +184,13 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
           />
         );
 
-      case 'colorSelection':
+      case 'characterSelection':
         return (
-          <ColorSelectionScreen
+          <CharacterSelectionScreen
             onBack={() => setCurrentScreen('boardModeSelection')}
-            onSaveColors={handleSaveColors}
-            onColorsChange={handleColorsChange}
-            initialPlayer1Color={playerColors.player1}
-            initialPlayer2Color={playerColors.player2}
+            onStartGame={handleStartMatch}
+            onSelectionChange={handleCharactersChange}
+            selection={characters}
             player2Label={opponentMode === 'cpu' ? 'الهاتف' : 'اللاعب 2'}
           />
         );
@@ -207,6 +214,7 @@ const AppContent: React.FC<{ initialPreferences: Preferences }> = ({ initialPref
               boardMode={getBoardMode(selectedBoardMode)}
               onPlayAgain={handlePlayAgain}
               onChooseAnotherBoard={handleChooseAnotherBoard}
+              onChangeCharacters={handleChangeCharacters}
               onBackToHome={handleBackToHome}
             />
           </View>

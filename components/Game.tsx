@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Modal, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, BackHandler, Image, Modal, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Defs, Line, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useAudioManager } from './AudioManager';
 import {
@@ -11,16 +11,13 @@ import {
   OpponentMode,
   StartingPlayerMode,
 } from './BoardModes';
+import { CHARACTERS, CharacterId } from './Characters';
 import { chooseCpuMove, getCpuMoveDelay } from './GameAI';
+import { createMatchPlayers, Player } from './MatchPlayers';
 import { COLORS } from './theme';
 
 // --- Interfaces (تعريف أنواع البيانات) ---
-export interface Player {
-  id: number;
-  name: string;
-  score: number;
-  color: string;
-}
+export type { Player } from './MatchPlayers';
 
 export interface GameState {
   players: Player[];
@@ -127,14 +124,14 @@ interface GameProps {
   onBackToHome?: () => void;
   onOpenSettings?: () => void;
   paused?: boolean;
-  player1Color?: string;
-  player2Color?: string;
+  player1CharacterId: CharacterId;
+  player2CharacterId: CharacterId;
   boardMode: BoardMode;
   opponentMode: OpponentMode;
   cpuDifficulty: CpuDifficulty;
   startingPlayer: StartingPlayerMode;
   onGameEnd?: (
-    players: {id: number, name: string, score: number, color: string}[],
+    players: Player[],
     endedEarly: boolean,
   ) => void;
 }
@@ -143,8 +140,8 @@ export const Game: React.FC<GameProps> = ({
   onBackToHome, 
   onOpenSettings,
   paused = false,
-  player1Color = COLORS.playerRed,
-  player2Color = COLORS.playerBlue,
+  player1CharacterId,
+  player2CharacterId,
   boardMode,
   opponentMode,
   cpuDifficulty,
@@ -154,14 +151,17 @@ export const Game: React.FC<GameProps> = ({
   const { playClickSound, playBoxCompleteSound, playGameOverSound } = useAudioManager();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const player1Color = CHARACTERS[player1CharacterId].color;
+  const player2Color = CHARACTERS[player2CharacterId].color;
   const completedSquareGradients = useMemo(() => [player1Color, player2Color]
     .map(createCompletedSquareGradient), [player1Color, player2Color]);
-  const sidePanelWidth = Math.min(340, Math.max(244,
+  const sidePanelWidth = Math.min(340, Math.max(228,
     Math.min(284, layout.width * 0.36) + Math.max(0, windowWidth - 900) * 0.15,
   ));
   const compactControls = (layout.height || windowHeight) < 600;
-  const panelPadding = compactControls ? 12 : 22;
-  const layoutGap = compactControls ? 12 : 24;
+  const tightControls = (layout.height || windowHeight) < 380;
+  const panelPadding = compactControls ? 8 : 18;
+  const layoutGap = compactControls ? 8 : 24;
   const availableBoardWidth = Math.max(0, layout.width - 32 - layoutGap - sidePanelWidth - BOARD_TOUCH_PADDING * 2);
   const availableBoardHeight = Math.max(0, layout.height - 16 - BOARD_TOUCH_PADDING * 2);
   // Reserve enough room for the largest visible dot and edge before fitting square cells.
@@ -188,9 +188,7 @@ export const Game: React.FC<GameProps> = ({
     [BOARD_INSET, boardMode, cellSize],
   );
   const controlHeight = layout.height || windowHeight;
-  const controlGap = compactControls ? 8 : 16;
-  const playerCardHeight = compactControls ? 80 : 108;
-  const turnBadgeHeight = compactControls ? 44 : 60;
+  const controlGap = compactControls ? 6 : 12;
   const actionHeight = Math.max(44, Math.min(54, controlHeight * 0.12));
 
   
@@ -210,15 +208,7 @@ export const Game: React.FC<GameProps> = ({
     });
 
     return {
-      players: [
-        { id: 1, name: 'اللاعب الأول', score: 0, color: player1Color },
-        {
-          id: 2,
-          name: opponentMode === 'cpu' ? 'الهاتف' : 'اللاعب الثاني',
-          score: 0,
-          color: player2Color,
-        },
-      ],
+      players: createMatchPlayers({ player1: player1CharacterId, player2: player2CharacterId }, opponentMode),
       currentPlayer: getStartingPlayerIndex(startingPlayer),
       horizontalLines,
       verticalLines,
@@ -231,7 +221,7 @@ export const Game: React.FC<GameProps> = ({
       moveCount: 0,
       boxesCompletedLastMove: 0,
     };
-  }, [boardMode, opponentMode, player1Color, player2Color, startingPlayer]);
+  }, [boardMode, opponentMode, player1CharacterId, player2CharacterId, startingPlayer]);
 
   const [gameState, setGameState] = useState<GameState>(() => createInitialState());
   const [isCpuThinking, setIsCpuThinking] = useState(false);
@@ -701,48 +691,40 @@ export const Game: React.FC<GameProps> = ({
 
       <View style={[styles.sidePanel, { width: sidePanelWidth, gap: controlGap, padding: panelPadding }]}>
         <Text style={[styles.boardSummary, compactControls && styles.compactSummary]} numberOfLines={2}>{boardSummary}</Text>
-        <View style={[
-          styles.turnBadge,
-          {
-            minHeight: turnBadgeHeight,
-            borderColor: gameState.players[gameState.currentPlayer].color,
-            backgroundColor: gameState.players[gameState.currentPlayer].color + '24',
-          },
-        ]}>
-          <View style={[
-            styles.turnColorIndicator,
-            { backgroundColor: gameState.players[gameState.currentPlayer].color },
-          ]} />
-          <Text style={[styles.turnText, compactControls && styles.compactTurnText]} numberOfLines={1}>
-            {paused
-              ? 'المباراة متوقفة'
-              : isCpuTurn && !gameState.gameOver
-              ? 'الهاتف يفكر...'
-              : `دور ${gameState.players[gameState.currentPlayer].name}`}
-          </Text>
-        </View>
         <View style={[styles.playersInfo, { gap: controlGap }]}>
-          {gameState.players.map((player, index) => (
-            <View key={player.id} style={[
-              styles.playerCard,
-              {
-                minHeight: playerCardHeight,
-                borderColor: gameState.currentPlayer === index ? player.color : '#334155',
-                backgroundColor: gameState.currentPlayer === index ? player.color + '18' : COLORS.board,
-              },
-              gameState.currentPlayer === index && styles.currentPlayer,
-            ]}>
-              <View style={styles.playerIdentity}>
-                <View style={[styles.playerColorIndicator, { backgroundColor: player.color }]} />
-                <Text style={[styles.playerName, compactControls && styles.compactPlayerName]} numberOfLines={2}>
-                  {player.name}
-                </Text>
+          {gameState.players.map((player, index) => {
+            const character = CHARACTERS[player.characterId];
+            const active = gameState.currentPlayer === index;
+            let status = 'في الانتظار';
+            if (gameState.gameOver) status = 'انتهت المباراة';
+            else if (active) {
+              status = paused || leaveConfirmationOpen ? 'متوقفة مؤقتاً'
+                : isCpuTurn ? '◀ الهاتف يفكر...' : '◀ الدور الحالي';
+            }
+            return (
+              <View key={player.id} accessible accessibilityLabel={`${player.name}، ${character.name}، ${player.score} نقطة، ${status}`} style={[
+                styles.playerCard,
+                tightControls && styles.compactPlayerCard,
+                {
+                  borderColor: active ? character.color : '#334155',
+                  backgroundColor: active ? character.color + '18' : COLORS.board,
+                },
+              ]}>
+                <Image source={character.faceImage} style={[styles.playerFace, tightControls && styles.compactFace]} resizeMode="contain" accessible={false} />
+                <View style={styles.playerIdentity}>
+                  <Text style={styles.playerName}>{character.name}</Text>
+                  <Text style={styles.playerRole}>{player.name}</Text>
+                  <Text style={styles.playerStatus} accessibilityLiveRegion="polite">{status}</Text>
+                </View>
+                <View style={styles.scoreInfo}>
+                  <Text style={[styles.playerScore, compactControls && styles.compactScore]}>{player.score}</Text>
+                  <Text style={styles.scoreLabel}>نقطة</Text>
+                </View>
               </View>
-              <Text style={[styles.playerScore, compactControls && styles.compactScore]}>{player.score}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
-        <TouchableOpacity style={[styles.resetButton, { minHeight: actionHeight }]} onPress={requestResetGame}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="إعادة المباراة" style={[styles.resetButton, { minHeight: actionHeight }]} onPress={requestResetGame}>
           <Text style={[styles.resetButtonText, compactControls && styles.compactActionText]}>إعادة المباراة</Text>
         </TouchableOpacity>
         <View style={styles.topActions}>
@@ -877,7 +859,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  compactSummary: { fontSize: 13 },
+  compactSummary: { fontSize: 12, lineHeight: 18 },
   boardSummary: {
     color: COLORS.gold,
     fontSize: 16,
@@ -887,40 +869,31 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   playersInfo: {
-    flexDirection: 'row-reverse',
+    gap: 8,
   },
   playerCard: {
-    flex: 1,
+    minHeight: 96,
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
     backgroundColor: COLORS.board,
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 12,
-    borderWidth: 1,
-  },
-  currentPlayer: {
     borderWidth: 2,
   },
-  playerColorIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: COLORS.text,
-  },
+  compactPlayerCard: { minHeight: 68, paddingHorizontal: 6, paddingVertical: 4, gap: 5 },
+  playerFace: { width: 64, height: 72 },
+  compactFace: { width: 46, height: 52 },
   playerIdentity: {
-    width: '100%',
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
   },
   playerName: {
-    flexShrink: 1,
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'center',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
     color: COLORS.text,
     writingDirection: 'rtl',
   },
@@ -930,33 +903,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: COLORS.text,
   },
-  compactScore: { fontSize: 28 },
-  compactPlayerName: { fontSize: 13 },
-  turnBadge: {
-    flexDirection: 'row-reverse',
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 8,
-  },
-  turnColorIndicator: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderColor: COLORS.text,
-    borderWidth: 1,
-  },
-  turnText: {
-    flexShrink: 1,
-    fontSize: 19,
-    fontWeight: '800',
-    color: COLORS.text,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-  compactTurnText: { fontSize: 15 },
+  playerRole: { fontSize: 12, lineHeight: 17, color: COLORS.mutedText, writingDirection: 'rtl' },
+  playerStatus: { fontSize: 11, lineHeight: 16, color: COLORS.text, writingDirection: 'rtl' },
+  scoreInfo: { minWidth: 30, alignItems: 'center' },
+  scoreLabel: { fontSize: 11, lineHeight: 15, color: COLORS.mutedText, writingDirection: 'rtl' },
+  compactScore: { fontSize: 26, lineHeight: 31 },
   boardContainer: {
     backgroundColor: COLORS.board,
     borderRadius: 14,

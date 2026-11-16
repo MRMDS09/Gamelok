@@ -104,7 +104,7 @@ export const BoardModeSelectionScreen: React.FC<BoardModeSelectionScreenProps> =
           </TouchableOpacity>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>اختر نمط المباراة</Text>
-            <Text style={styles.subtitle}>حدّد شكل الشبكة وطريقة اللعب، ثم اختر الألوان</Text>
+            <Text style={styles.subtitle}>حدّد شكل الشبكة وطريقة اللعب، ثم اختر الشخصيات</Text>
           </View>
         </View>
 
@@ -212,7 +212,7 @@ export const BoardModeSelectionScreen: React.FC<BoardModeSelectionScreenProps> =
               startingPlayer,
             )}
             accessibilityRole="button"
-            accessibilityLabel="متابعة إلى اختيار الألوان"
+            accessibilityLabel="متابعة إلى اختيار الشخصيات"
           >
             <Text style={styles.continueButtonText}>متابعة</Text>
           </TouchableOpacity>

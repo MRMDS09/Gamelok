@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameSettings } from '../components/SettingsScreen';
-import { COLORS } from '../components/theme';
+import { CharacterSelection, DEFAULT_CHARACTER_SELECTION, normalizeCharacterSelection } from '../components/Characters';
 
 const STORAGE_KEY = '@gamelok/preferences/v1';
 
 export interface Preferences {
   settings: GameSettings;
-  colors: { player1: string; player2: string };
+  characters: CharacterSelection;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -17,7 +17,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     clickSoundVolume: 0.8,
     soundEffectsEnabled: true,
   },
-  colors: { player1: COLORS.playerRed, player2: COLORS.playerBlue },
+  characters: DEFAULT_CHARACTER_SELECTION,
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -27,7 +27,6 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 export const normalizePreferences = (value: unknown): Preferences => {
   const stored = asRecord(value);
   const settings = asRecord(stored.settings);
-  const colors = asRecord(stored.colors);
   const defaults = DEFAULT_PREFERENCES.settings;
   const boolean = (key: keyof GameSettings): boolean =>
     typeof settings[key] === 'boolean' ? settings[key] as boolean : defaults[key] as boolean;
@@ -36,14 +35,6 @@ export const normalizePreferences = (value: unknown): Preferences => {
     return typeof value === 'number' && Number.isFinite(value)
       ? Math.round(Math.max(0, Math.min(1, value)) * 10) / 10 : defaults[key];
   };
-  const color = (value: unknown, fallback: string): string =>
-    typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
-  const player1 = color(colors.player1, DEFAULT_PREFERENCES.colors.player1);
-  let player2 = color(colors.player2, DEFAULT_PREFERENCES.colors.player2);
-  if (player1.toLowerCase() === player2.toLowerCase()) {
-    player2 = player1.toLowerCase() === DEFAULT_PREFERENCES.colors.player2.toLowerCase()
-      ? DEFAULT_PREFERENCES.colors.player1 : DEFAULT_PREFERENCES.colors.player2;
-  }
   return {
     settings: {
       backgroundMusicEnabled: boolean('backgroundMusicEnabled'),
@@ -52,7 +43,8 @@ export const normalizePreferences = (value: unknown): Preferences => {
       clickSoundVolume: volume('clickSoundVolume'),
       soundEffectsEnabled: boolean('soundEffectsEnabled'),
     },
-    colors: { player1, player2 },
+    // v1 color-only preferences have no character IDs; keep their audio settings.
+    characters: normalizeCharacterSelection(stored.characters),
   };
 };
 
